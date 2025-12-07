@@ -79,6 +79,19 @@ python buildsvm.py
 python make_cache.py
 ```
 
+### Adding a single paper by arXiv id
+
+If you want to ingest one paper outside of the regular daily crawl, you can
+run the helper script and type (or pass) the arXiv identifier:
+
+```bash
+python ingest_single_paper.py 1512.08756v2
+```
+
+The script pulls the metadata from arXiv, downloads the PDF, extracts text,
+creates thumbnails, and then reruns the analysis/cache steps so the new paper
+is immediately incorporated into the database.
+
 I run the server in a screen session, so `screen -S serve` to create it (or `-r` to reattach to it) and run:
 
 ```bash
