@@ -11,6 +11,8 @@ import json
 import time
 import pickle
 import dateutil.parser
+import urllib.error
+import urllib.request
 
 from sqlite3 import dbapi2 as sqlite3
 from utils import safe_pickle_dump, Config
@@ -28,12 +30,51 @@ meta = pickle.load(open(Config.meta_path, "rb"))
 vocab = meta['vocab']
 idf = meta['idf']
 
+OPENALEX_WORK_BASE = 'https://api.openalex.org/works/https://arxiv.org/abs/'
+
+
+def fetch_citation_count(arxiv_id):
+  """Fetch citation counts from OpenAlex for a given arXiv identifier."""
+
+  url = OPENALEX_WORK_BASE + arxiv_id
+  req = urllib.request.Request(url, headers={'User-Agent': 'arxiv-sanity-preserver/1.0'})
+  try:
+    with urllib.request.urlopen(req, timeout=10) as resp:
+      if resp.status != 200:
+        print('OpenAlex returned status %d for %s' % (resp.status, arxiv_id))
+        return None
+      payload = json.loads(resp.read().decode('utf-8'))
+      return payload.get('cited_by_count')
+  except urllib.error.HTTPError as e:
+    print('HTTPError fetching citation count for %s: %s' % (arxiv_id, e))
+  except urllib.error.URLError as e:
+    print('URLError fetching citation count for %s: %s' % (arxiv_id, e))
+  except Exception as e:
+    print('Unexpected error fetching citation count for %s: %s' % (arxiv_id, e))
+  return None
+
 print('decorating the database with additional information...')
 for pid,p in db.items():
   timestruct = dateutil.parser.parse(p['updated'])
   p['time_updated'] = int(timestruct.strftime("%s")) # store in struct for future convenience
   timestruct = dateutil.parser.parse(p['published'])
   p['time_published'] = int(timestruct.strftime("%s")) # store in struct for future convenience
+
+print('fetching citation counts from OpenAlex (if missing)...')
+updated_citations = 0
+for pid, p in db.items():
+  if p.get('citation_count') is not None:
+    continue
+
+  count = fetch_citation_count(pid)
+  if count is None:
+    count = 0
+  else:
+    updated_citations += 1
+
+  p['citation_count'] = count
+  time.sleep(0.1)  # be kind to OpenAlex API
+print('Updated citation counts for %d papers.' % updated_citations)
 
 print('computing min/max time for all papers...')
 tts = [time.mktime(dateutil.parser.parse(p['updated']).timetuple()) for pid,p in db.items()]
@@ -56,7 +97,14 @@ for lib in libs:
   pid = lib['paper_id']
   counts[pid] = counts.get(pid, 0) + 1
 top_paper_counts = sorted([(v,k) for k,v in counts.items() if v > 0], reverse=True)
-CACHE['top_sorted_pids'] = [q[1] for q in top_paper_counts]
+CACHE['library_sorted_pids'] = [q[1] for q in top_paper_counts]
+
+print('computing citation-based popularity...')
+citation_scores = []
+for pid, paper in db.items():
+  citation_scores.append((paper.get('citation_count', 0), pid))
+citation_scores.sort(reverse=True, key=lambda x: x[0])
+CACHE['top_sorted_pids'] = [pid for _, pid in citation_scores]
 
 # some utilities for creating a search index for faster search
 punc = "'!\"#$%&\'()*+,./:;<=>?@[\\]^_`{|}~'" # removed hyphen from string.punctuation
