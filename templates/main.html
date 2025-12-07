@@ -192,25 +192,27 @@ $(document).ready(function(){
 
     <!-- Right: Arxiv Code bar + user info -->
     <div id="header-actions">
-      <div id="ingest-control">
-        <button id="arxiv-code-btn" type="button">Arxiv Code</button>
-        <button id="ingest-toggle" aria-label="Add arXiv paper" title="Add arXiv paper">+</button>
+      <div class="header-actions-top">
+        <div id="ingest-control">
+          <button id="arxiv-code-btn" type="button">Arxiv Code</button>
+          <button id="ingest-toggle" aria-label="Add arXiv paper" title="Add arXiv paper">+</button>
 
-        <form id="ingest-form" method="post" action="{{ url_for('ingest_arxiv') }}">
-          <input
-            id="ingest-id"
-            name="paper_id"
-            type="text"
-            placeholder="arXiv id (e.g., 1512.08756v2)"
-            aria-label="arXiv identifier"
-            required
-          >
-          <button type="submit">Add</button>
-        </form>
-      </div>
+          <form id="ingest-form" method="post" action="{{ url_for('ingest_arxiv') }}">
+            <input
+              id="ingest-id"
+              name="paper_id"
+              type="text"
+              placeholder="arXiv id (e.g., 1512.08756v2)"
+              aria-label="arXiv identifier"
+              required
+            >
+            <button type="submit">Add</button>
+          </form>
+        </div>
 
-      <div id="userinfo">
-        <a href="{{ url_for('account') }}">Single-user: {{ g.user.username }}</a>
+        <div id="userinfo">
+          <a href="{{ url_for('account') }}">Single-user: {{ g.user.username }}</a>
+        </div>
       </div>
     </div>
   </div>
@@ -252,9 +254,9 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
 <div id="maindiv">
   <div id="content-grid">
 
-    <!-- Left column: Search Condition block -->
+    <!-- Left column: Research Conditions sidebar -->
     <aside id="search-menu">
-      <div class="search-menu-title">Search Condition</div>
+      <div class="search-menu-title">Research Conditions</div>
       <form action="/search" method="get" id="search-menu-form">
 
         <label for="qfield">Search Bar</label>
@@ -291,6 +293,7 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
     <!-- Right column: tabs + paper thread -->
     <section id="results-column">
       <div class="results-card">
+        <div class="section-heading">Paper Feed</div>
         <div id="pagebar">
           <div class="pagelink" id="tabrecent"><a href="/">most recent</a></div>
           <div class="pagelink" id="tabtop"><a href="/top">top recent</a></div>
