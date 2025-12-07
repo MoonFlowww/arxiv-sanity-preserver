@@ -53,13 +53,13 @@ var urlq = ''; // global will be read in to QueryString when load is done
 // when page loads...
 $(document).ready(function(){
 
-	urlq = QueryString.q;
+  urlq = QueryString.q;
 
   // display message, if any
   if(msg !== '') { d3.select("#rtable").append('div').classed('msg', true).html(msg); }
 
   // add papers to #rtable
-	var done = addPapers(10, false);
+  var done = addPapers(10, false);
   if(done) { $("#loadmorebtn").hide(); }
 
   // set up inifinite scrolling for adding more papers
@@ -82,9 +82,9 @@ $(document).ready(function(){
 
   if(papers.length === 0) { $("#loadmorebtn").hide(); }
 
-	if(!(typeof urlq == 'undefined')) {
-		d3.select("#qfield").attr('value', urlq.replace(/\+/g, " "));
-	}
+  if(!(typeof urlq == 'undefined')) {
+    d3.select("#qfield").attr('value', urlq.replace(/\+/g, " "));
+  }
 
   var vf = QueryString.vfilter; if(typeof vf === 'undefined') { vf = 'all'; }
   var tf = QueryString.timefilter; if(typeof tf === 'undefined') { tf = 'week'; }
@@ -115,9 +115,8 @@ $(document).ready(function(){
     if(vf === '1') { delt.classed('vchoice-selected', true); }
   }
 
-  // time choices for recommend/top
+  // time choices for recommend/top/friends
   if(render_format === 'recommend' || render_format === 'top' || render_format === 'friends') {
-    // insert time filtering options for these two views
     var elt = d3.select('#recommend-time-choice');
     elt.append('div').classed('fdivider', true).html('|');
     for(var i=0;i<time_ranges.length;i++) {
@@ -182,14 +181,19 @@ $(document).ready(function(){
 
 <div id ="titdiv">
 
-  <div id="header-actions">
-    <!-- User account information on top right -->
-    <div id="userinfo">
-          <a href="{{ url_for('account') }}">Single-user: {{ g.user.username }}</a>
+  <!-- Left: title -->
+  <a href="/">
+    <div id="tittxt">
+      <h1>Arxiv Sanity Preserver</h1>
+      Built in spare time by <a href="https://twitter.com/karpathy">@karpathy</a> to accelerate research.<br>
+      Serving last {{ totpapers }} papers from cs.[CV|CL|LG|AI|NE]/stat.ML
     </div>
+  </a>
 
-    <!-- Quick ingest control -->
+  <!-- Right: actions (Arxiv Code + add button + user info) -->
+  <div id="header-actions">
     <div id="ingest-control">
+      <button id="arxiv-code-btn" type="button">Arxiv Code</button>
       <button id="ingest-toggle" aria-label="Add arXiv paper" title="Add arXiv paper">+</button>
       <form id="ingest-form" method="post" action="{{ url_for('ingest_arxiv') }}">
         <input
@@ -203,16 +207,12 @@ $(document).ready(function(){
         <button type="submit">Add</button>
       </form>
     </div>
+
+    <div id="userinfo">
+      <a href="{{ url_for('account') }}">Single-user: {{ g.user.username }}</a>
+    </div>
   </div>
 
-  <!-- Site information/banner on top left -->
-	<a href="/">
-	<div id="tittxt">
-		<h1>Arxiv Sanity Preserver</h1>
-		Built in spare time by <a href="https://twitter.com/karpathy">@karpathy</a> to accelerate research.<br>
-		Serving last {{ totpapers }} papers from cs.[CV|CL|LG|AI|NE]/stat.ML
-	</div>
-	</a>
 </div>
 
 <div id="flashesdiv">
@@ -248,36 +248,17 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
 </div>
 {% endif %}
 
-<div id="pagebar">
-  <div class="pagelink" id="tabrecent"><a href="/">most recent</a></div>
-  <div class="pagelink" id="tabtop"><a href="/top">top recent</a></div>
-  <div class="pagelink" id="tabtwtr"><a href="/toptwtr">top hype</a></div>
-  <div class="pagelink" id="tabfriends"><a href="/friends">friends</a></div>
-  <div class="pagelink" id="tabdiscussions"><a href="/discussions">discussions</a></div>
-  <div class="pagelink" id="tabrec"><a href="/recommend">recommended</a></div>
-  <div class="pagelink" id="tablib"><a href="/library">library</a></div>
-</div>
-
 <div id="maindiv">
   <div id="content-grid">
+
+    <!-- Left column: search conditions -->
     <aside id="search-menu">
-      <div class="search-menu-title">Search Menu</div>
+      <div class="search-menu-title">Search Condition</div>
       <form action="/search" method="get" id="search-menu-form">
-        <label for="qfield">Keyword or researcher</label>
+        <label for="qfield">Search Bar</label>
         <input name="q" type="text" id="qfield" value="{{ search_query }}" placeholder="Find papers or authors">
 
-        <label for="classification-filter">Classification</label>
-        <select id="classification-filter" name="classification">
-          <option value="all" {% if selected_classification == 'all' %}selected{% endif %}>All classifications</option>
-          <option value="hot" {% if selected_classification == 'hot' %}selected{% endif %}>Hot (score ≥ 2.0)</option>
-          <option value="neutral" {% if selected_classification == 'neutral' %}selected{% endif %}>Neutral (1.0–2.0)</option>
-          <option value="slop" {% if selected_classification == 'slop' %}selected{% endif %}>Slop (score &lt; 1.0)</option>
-        </select>
-
-        <label for="min-score">Minimum score</label>
-        <input name="min_score" id="min-score" type="number" step="0.1" min="0" value="{{ min_score }}" placeholder="e.g., 1.5">
-
-        <label for="topic-select">Topics</label>
+        <label for="topic-select">Multi-Topics Selection</label>
         <div class="topic-scroll">
           <select id="topic-select" name="topics" size="10" multiple>
             <option value="" {% if not selected_topics %}selected{% endif %}>All topics</option>
@@ -287,20 +268,47 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
           </select>
         </div>
 
+        <label for="min-score">Label Score &gt; X</label>
+        <input name="min_score" id="min-score" type="number" step="0.1" min="0" value="{{ min_score }}" placeholder="e.g., 1.5">
+
+        <!-- keep classification dropdown, but it’s no longer the primary visual block -->
+        <label for="classification-filter">Classification</label>
+        <select id="classification-filter" name="classification">
+          <option value="all" {% if selected_classification == 'all' %}selected{% endif %}>All classifications</option>
+          <option value="hot" {% if selected_classification == 'hot' %}selected{% endif %}>Hot (score ≥ 2.0)</option>
+          <option value="neutral" {% if selected_classification == 'neutral' %}selected{% endif %}>Neutral (1.0–2.0)</option>
+          <option value="slop" {% if selected_classification == 'slop' %}selected{% endif %}>Slop (score &lt; 1.0)</option>
+        </select>
+
         <button type="submit" class="primary-btn">Apply filters</button>
       </form>
     </aside>
 
+    <!-- Center column: tabs + paper thread -->
     <section id="results-column">
-      <!-- this div will be rendered into dynamcially at init with JS -->
+
+      <!-- Tabs: Recent | Top Recent | ... now inside the paper column -->
+      <div id="pagebar">
+        <div class="pagelink" id="tabrecent"><a href="/">most recent</a></div>
+        <div class="pagelink" id="tabtop"><a href="/top">top recent</a></div>
+        <div class="pagelink" id="tabtwtr"><a href="/toptwtr">top hype</a></div>
+        <div class="pagelink" id="tabfriends"><a href="/friends">friends</a></div>
+        <div class="pagelink" id="tabdiscussions"><a href="/discussions">discussions</a></div>
+        <div class="pagelink" id="tabrec"><a href="/recommend">recommended</a></div>
+        <div class="pagelink" id="tablib"><a href="/library">library</a></div>
+      </div>
+
+      <!-- time-choice bar -->
       <div id="recommend-time-choice" class="centerdiv"></div>
 
+      <!-- Paper thread -->
       <div id="rtable"></div>
 
       <div id="loadmore">
         <button id="loadmorebtn">Load more</button>
       </div>
     </section>
+
   </div>
 </div>
 
