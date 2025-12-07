@@ -219,18 +219,7 @@ $(document).ready(function(){
 
   <!-- User account information on top right -->
   <div id="userinfo">
-    {% if not g.user %}
-    <form action="{{ url_for('login') }}" method="post">
-      User:
-      <input type="text" name="username" class="input-no-border">
-      Pass:
-      <input type="password" name="password" class="input-no-border">
-      <input type="submit" value="Login or Create" class="btn-fancy">
-    </form>
-    {% else %}
-    {{ g.user.username }}
-    <a href="{{ url_for('logout') }}">log out</a>
-    {% endif %}
+    Single-user mode: {{ g.user.username }}
   </div>
 
   <!-- Site information/banner on top left -->
