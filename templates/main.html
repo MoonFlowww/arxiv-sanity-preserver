@@ -95,17 +95,18 @@ $(document).ready(function(){
   if(render_format === 'friends') { link_endpoint = 'friends'; }
   if(render_format === 'toptwtr') { link_endpoint = 'toptwtr'; }
   if(render_format === 'discussions') { link_endpoint = 'discussions'; }
+  if(render_format === 'topics') { link_endpoint = 'topics'; }
 
   var time_ranges = ['day', '3days', 'week', 'month', 'year', 'alltime'];
   var time_txt = {'day':'Last day', '3days': 'Last 3 days', 'week': 'Last week', 'month': 'Last month', 'year': 'Last year', 'alltime': 'All time'}
   var time_range = tf;
 
   // set up time filtering options
-  if(render_format === 'recommend' || render_format === 'top' || render_format === 'recent' || render_format === 'friends') {
+  if(render_format === 'recommend' || render_format === 'top' || render_format === 'recent' || render_format === 'friends' || render_format === 'topics') {
     // insert version filtering options for these views
     var elt = d3.select('#recommend-time-choice');
     var vflink = vf === 'all' ? '1' : 'all'; // toggle only showing v1 or not
-    if(render_format === 'recent') {
+    if(render_format === 'recent' || render_format === 'topics') {
       var aelt = elt.append('a').attr('href', '/'+link_endpoint+'?'+'&vfilter='+vflink); // leave out timefilter from this page
     } else {
       var aelt = elt.append('a').attr('href', '/'+link_endpoint+'?'+'timefilter='+time_range+'&vfilter='+vflink);
@@ -153,6 +154,7 @@ $(document).ready(function(){
   if( render_format === 'discussions') { d3.select('#tabdiscussions').classed('tab-selected', true); }
   if( render_format === 'recommend') { d3.select('#tabrec').classed('tab-selected', true); }
   if( render_format === 'library') { d3.select('#tablib').classed('tab-selected', true); }
+  if( render_format === 'topics') { d3.select('#tabtopics').classed('tab-selected', true); }
 
   $("#goaway").on('click', function(){
     $("#prompt").slideUp('fast');
@@ -211,7 +213,7 @@ $(document).ready(function(){
 
 {% if show_prompt == "yes" %}
 <div id="prompt" style="background-color:#f6ff7a; padding:10px; width:980px; margin-left:auto; margin-right:auto; font-size:14px;">
-Hey there {{ g.user.username }}, sorry to interrupt. Arxiv-sanity costs a non-negligible amount of money to host. 
+Hey there {{ g.user.username }}, sorry to interrupt. Arxiv-sanity costs a non-negligible amount of money to host.
 If you love the site, please consider pitching in:
   <form action="https://www.paypal.com/cgi-bin/webscr" method="post" target="_top" style="display:inline-block;">
   <input type="hidden" name="cmd" value="_s-xclick">
@@ -223,10 +225,22 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
 </div>
 {% endif %}
 
+{% if render_format == "topics" %}
+<div id="topic-picker" class="centerdiv">
+  <div class="topic-heading">Browse by arXiv topic</div>
+  <div class="topic-list">
+    {% for topic in topics %}
+      <a class="topic-pill {% if selected_topic == topic.name %}topic-pill-selected{% endif %}" href="/topics?topic={{ topic.name|urlencode }}">{{ topic.name }} ({{ topic.count }})</a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 <div id="pagebar">
   <div class="pagelink" id="tabrecent"><a href="/">most recent</a></div>
   <div class="pagelink" id="tabtop"><a href="/top">top recent</a></div>
   <div class="pagelink" id="tabtwtr"><a href="/toptwtr">top hype</a></div>
+  <div class="pagelink" id="tabtopics"><a href="/topics">topics</a></div>
   <div class="pagelink" id="tabfriends"><a href="/friends">friends</a></div>
   <div class="pagelink" id="tabdiscussions"><a href="/discussions">discussions</a></div>
   <div class="pagelink" id="tabrec"><a href="/recommend">recommended</a></div>

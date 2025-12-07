@@ -31,6 +31,10 @@ app = Flask(__name__)
 app.config.from_object(__name__)
 limiter = Limiter(app, global_limits=["100 per hour", "20 per minute"])
 
+# topic browsing globals
+TOPIC_PIDS = {}
+TOPICS = []
+
 # -----------------------------------------------------------------------------
 # utilities for database interactions 
 # -----------------------------------------------------------------------------
@@ -170,11 +174,21 @@ def papers_from_svm(recent_days=None):
   return out
 
 def papers_filter_version(papers, v):
-  if v != '1': 
+  if v != '1':
     return papers # noop
   intv = int(v)
   filtered = [p for p in papers if p['_version'] == intv]
   return filtered
+
+def papers_from_topic(topic_name, vfilter='all'):
+  """Return papers that match the provided arXiv primary category."""
+
+  if not topic_name:
+    return []
+
+  pids = TOPIC_PIDS.get(topic_name, [])
+  papers = [db[pid] for pid in pids]
+  return papers_filter_version(papers, vfilter)
 
 def encode_json(ps, n=10, send_images=True, send_abstracts=True):
 
@@ -247,7 +261,7 @@ def default_context(papers, **kws):
   except Exception as e:
     print(e)
 
-  ans = dict(papers=top_papers, numresults=len(papers), totpapers=len(db), tweets=[], msg='', show_prompt=show_prompt, pid_to_users={})
+  ans = dict(papers=top_papers, numresults=len(papers), totpapers=len(db), tweets=[], msg='', show_prompt=show_prompt, pid_to_users={}, topics=[], selected_topic='')
   ans.update(kws)
   return ans
 
@@ -396,6 +410,22 @@ def search():
   q = request.args.get('q', '') # get the search request
   papers = papers_search(q) # perform the query and get sorted documents
   ctx = default_context(papers, render_format="search")
+  return render_template('main.html', **ctx)
+
+@app.route('/topics', methods=['GET'])
+def topics():
+  """Browse papers grouped by arXiv category."""
+
+  topic_name = request.args.get('topic', '')
+  vstr = request.args.get('vfilter', 'all')
+  papers = papers_from_topic(topic_name, vfilter=vstr)
+
+  if topic_name:
+    msg = 'Most recent papers in topic %s:' % (topic_name, ) if len(papers) > 0 else 'No papers found for topic %s.' % (topic_name, )
+  else:
+    msg = 'Select an arXiv topic to browse recent papers.'
+
+  ctx = default_context(papers, render_format='topics', msg=msg, topics=TOPICS, selected_topic=topic_name)
   return render_template('main.html', **ctx)
 
 @app.route('/recommend', methods=['GET'])
@@ -675,6 +705,16 @@ if __name__ == "__main__":
   DATE_SORTED_PIDS = cache['date_sorted_pids']
   TOP_SORTED_PIDS = cache['top_sorted_pids']
   SEARCH_DICT = cache['search_dict']
+
+  print('building topic index')
+  for pid in DATE_SORTED_PIDS:
+    topic = db[pid].get('arxiv_primary_category', {}).get('term')
+    if not topic:
+      continue
+    TOPIC_PIDS.setdefault(topic, []).append(pid)
+  TOPICS = sorted([
+    {'name': topic, 'count': len(pids)} for topic, pids in TOPIC_PIDS.items()
+  ], key=lambda x: x['name'])
 
   print('mongodb/tweets integration disabled (no MongoDB, or not needed)')
   client = None
