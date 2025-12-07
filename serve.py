@@ -232,20 +232,39 @@ def teardown_request(exception):
 # search/sort functionality
 # -----------------------------------------------------------------------------
 
-def papers_search(qraw):
-  qparts = qraw.lower().strip().split() # split by spaces
-  # use reverse index and accumulate scores
+def filter_papers(papers, topic_name='', classification='all', min_score=None):
+  filtered = papers
+  if topic_name:
+    filtered = [p for p in filtered if p.get('arxiv_primary_category', {}).get('term') == topic_name]
+
+  if classification and classification != 'all':
+    filtered = [p for p in filtered if p.get('impact_classification') == classification]
+
+  if min_score is not None:
+    filtered = [p for p in filtered if p.get('impact_score', 0) >= min_score]
+
+  return filtered
+
+
+def papers_search(qraw, topic_name='', classification='all', min_score=None):
+  qparts = qraw.lower().strip().split() if qraw else []
   scores = []
-  for pid,p in db.items():
-    score = sum(SEARCH_DICT[pid].get(q,0) for q in qparts)
+
+  if not qparts:
+    base = [db[pid] for pid in DATE_SORTED_PIDS]
+    return filter_papers(base, topic_name=topic_name, classification=classification, min_score=min_score)
+
+  # use reverse index and accumulate scores
+  for pid, p in db.items():
+    score = sum(SEARCH_DICT[pid].get(q, 0) for q in qparts)
     if score == 0:
       continue # no match whatsoever, dont include
     # give a small boost to more recent papers
-    score += 0.0001*p['tscore']
+    score += 0.0001 * p['tscore']
     scores.append((score, p))
   scores.sort(reverse=True, key=lambda x: x[0]) # descending
   out = [x[1] for x in scores if x[0] > 0]
-  return out
+  return filter_papers(out, topic_name=topic_name, classification=classification, min_score=min_score)
 
 def papers_similar(pid):
   rawpid = strip_version(pid)
@@ -344,6 +363,8 @@ def encode_json(ps, n=10, send_images=True, send_abstracts=True):
     struct['link'] = p['link']
     struct['in_library'] = 1 if p['_rawid'] in libids else 0
     struct['citation_count'] = p.get('citation_count', 0)
+    struct['impact_score'] = p.get('impact_score', 0)
+    struct['impact_classification'] = p.get('impact_classification', 'slop')
     if send_abstracts:
       struct['abstract'] = p['summary']
     if send_images:
@@ -394,7 +415,21 @@ def default_context(papers, **kws):
   except Exception as e:
     print(e)
 
-  ans = dict(papers=top_papers, numresults=len(papers), totpapers=len(db), tweets=[], msg='', show_prompt=show_prompt, pid_to_users={}, topics=[], selected_topic='', selected_topic_display='')
+  ans = dict(
+    papers=top_papers,
+    numresults=len(papers),
+    totpapers=len(db),
+    tweets=[],
+    msg='',
+    show_prompt=show_prompt,
+    pid_to_users={},
+    topics=TOPICS,
+    selected_topic='',
+    selected_topic_display='',
+    selected_classification=kws.get('selected_classification', 'all'),
+    min_score=kws.get('min_score', ''),
+    search_query=kws.get('search_query', ''),
+  )
   ans.update(kws)
   return ans
 
@@ -541,8 +576,25 @@ def toggletag():
 @app.route("/search", methods=['GET'])
 def search():
   q = request.args.get('q', '') # get the search request
-  papers = papers_search(q) # perform the query and get sorted documents
-  ctx = default_context(papers, render_format="search")
+  topic_name = request.args.get('topic', '')
+  classification = request.args.get('classification', 'all')
+  min_score_str = request.args.get('min_score', '')
+
+  try:
+    min_score = float(min_score_str) if min_score_str != '' else None
+  except ValueError:
+    min_score = None
+
+  papers = papers_search(q, topic_name=topic_name, classification=classification, min_score=min_score)
+  ctx = default_context(
+    papers,
+    render_format="search",
+    selected_topic=topic_name,
+    selected_topic_display=translate_topic_name(topic_name) if topic_name else '',
+    selected_classification=classification,
+    min_score=min_score_str,
+    search_query=q,
+  )
   return render_template('main.html', **ctx)
 
 @app.route('/topics', methods=['GET'])
@@ -587,7 +639,7 @@ def top():
   papers = [p for p in top_sorted_papers if curtime - p['time_published'] < tt*24*60*60]
   papers = papers_filter_version(papers, vstr)
   ctx = default_context(papers, render_format='top',
-                        msg='Top papers based on OpenAlex citation counts:')
+                        msg='Top papers by OpenAlex recency-adjusted score:')
   return render_template('main.html', **ctx)
 
 @app.route('/toptwtr', methods=['GET'])
