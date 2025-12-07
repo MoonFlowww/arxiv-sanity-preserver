@@ -32,7 +32,9 @@ You will also need [ImageMagick](http://www.imagemagick.org/script/index.php) an
 The processing pipeline requires you to run a series of scripts, and at this stage I really encourage you to manually inspect each script, as they may contain various inline settings you might want to change. In order, the processing pipeline is:
 
 1. Run `fetch_papers.py` to query arxiv API and create a file `db.p` that contains all information for each paper. This script is where you would modify the **query**, indicating which parts of arxiv you'd like to use. Note that if you're trying to pull too many papers arxiv will start to rate limit you. You may have to run the script multiple times, and I recommend using the arg `--start-index` to restart where you left off when you were last interrupted by arxiv.
+
    * **Per-category limits (defaulted)**: By default, the script fetches per-category using `--category-counts "cs.AI=2000,cs.LG=2000,stat.ML=2000,cs.IT=1500,eess.SP=1500,cs.NE=1000,cs.CL=1000,cs.CV=1500,cond-mat.stat-mech=500,q-fin.TR=2000,q-fin.RM=2000,q-fin.ST=2000"`, which totals roughly 19k papers focused on Quantitative Finance and Computer Vision. Override the defaults with your own comma-separated `category=count` list (e.g., `cs.AI=50,cs.CL=20`), or set `--category-counts ""` to fall back to the combined `--search-query`.
+
    * **Example (20k target with Quantitative Finance + Computer Vision focus)**:
 
      ```bash
