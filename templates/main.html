@@ -230,7 +230,9 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
   <div class="topic-heading">Browse by arXiv topic</div>
   <div class="topic-list">
     {% for topic in topics %}
-      <a class="topic-pill {% if selected_topic == topic.name %}topic-pill-selected{% endif %}" href="/topics?topic={{ topic.name|urlencode }}">{{ topic.name }} ({{ topic.count }})</a>
+      <a class="topic-pill {% if selected_topic == topic.name %}topic-pill-selected{% endif %}" href="/topics?topic={{ topic.name|urlencode }}" title="{{ topic.name }}">
+        {{ topic.display_name }} — {{ topic.name }} ({{ topic.count }})
+      </a>
     {% endfor %}
   </div>
 </div>
