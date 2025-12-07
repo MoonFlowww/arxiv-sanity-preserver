@@ -120,6 +120,10 @@ function addPapers(num, dynamic) {
     tdiv.append('span').classed('cs', true).html(build_categories_html(p.tags));
     tdiv.append('br');
     tdiv.append('span').classed('ccs', true).html(p.comment);
+    if(typeof p.citation_count !== 'undefined') {
+      tdiv.append('br');
+      tdiv.append('span').classed('cit', true).html('Citations: ' + p.citation_count);
+    }
 
     // action items for each paper
     var ldiv = div.append('div').classed('dllinks', true);

@@ -211,6 +211,7 @@ def encode_json(ps, n=10, send_images=True, send_abstracts=True):
     struct['authors'] = [a['name'] for a in p['authors']]
     struct['link'] = p['link']
     struct['in_library'] = 1 if p['_rawid'] in libids else 0
+    struct['citation_count'] = p.get('citation_count', 0)
     if send_abstracts:
       struct['abstract'] = p['summary']
     if send_images:
@@ -453,7 +454,7 @@ def top():
   papers = [p for p in top_sorted_papers if curtime - p['time_published'] < tt*24*60*60]
   papers = papers_filter_version(papers, vstr)
   ctx = default_context(papers, render_format='top',
-                        msg='Top papers based on people\'s libraries:')
+                        msg='Top papers based on OpenAlex citation counts:')
   return render_template('main.html', **ctx)
 
 @app.route('/toptwtr', methods=['GET'])
