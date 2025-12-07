@@ -9,6 +9,7 @@ creates db2.p, which can be read by the server.
 import os
 import json
 import time
+import math
 import pickle
 import dateutil.parser
 import urllib.error
@@ -76,6 +77,25 @@ for pid, p in db.items():
   time.sleep(0.1)  # be kind to OpenAlex API
 print('Updated citation counts for %d papers.' % updated_citations)
 
+print('computing OpenAlex-inspired recency-aware scores...')
+alpha = 0.3
+seconds_per_year = 365.25 * 24 * 60 * 60
+for pid, p in db.items():
+  citations = p.get('citation_count', 0) or 0
+  years_since_pub = max((time.time() - p['time_published']) / seconds_per_year, 0)
+  score = math.log(1 + citations) - alpha * years_since_pub
+
+  if score >= 2.0:
+    classification = 'hot'
+  elif score >= 1.0:
+    classification = 'neutral'
+  else:
+    classification = 'slop'
+
+  p['impact_score'] = score
+  p['impact_classification'] = classification
+  p['years_since_pub'] = years_since_pub
+
 print('computing min/max time for all papers...')
 tts = [time.mktime(dateutil.parser.parse(p['updated']).timetuple()) for pid,p in db.items()]
 ttmin = min(tts)*1.0
@@ -102,7 +122,7 @@ CACHE['library_sorted_pids'] = [q[1] for q in top_paper_counts]
 print('computing citation-based popularity...')
 citation_scores = []
 for pid, paper in db.items():
-  citation_scores.append((paper.get('citation_count', 0), pid))
+  citation_scores.append((paper.get('impact_score', 0), pid))
 citation_scores.sort(reverse=True, key=lambda x: x[0])
 CACHE['top_sorted_pids'] = [pid for _, pid in citation_scores]
 
