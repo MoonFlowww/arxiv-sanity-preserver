@@ -15,6 +15,14 @@ from typing import Dict, Optional
 
 from utils import Config, safe_pickle_dump
 
+
+# Default per-category fetch caps used when --category-counts is not supplied.
+DEFAULT_CATEGORY_COUNTS = (
+  "cs.AI=2000,cs.LG=2000,stat.ML=2000,cs.IT=1500,"  # core ML/AI
+  "eess.SP=1500,cs.NE=1000,cs.CL=1000,cs.CV=1500,"  # signal/vision/linguistics
+  "cond-mat.stat-mech=500,q-fin.TR=2000,q-fin.RM=2000,q-fin.ST=2000"  # finance + misc
+)
+
 def encode_feedparser_dict(d):
   """ 
   helper function to get rid of feedparser bs with a deep copy. 
@@ -152,8 +160,8 @@ if __name__ == "__main__":
   parser.add_argument('--results-per-iteration', type=int, default=100, help='passed to arxiv API')
   parser.add_argument('--wait-time', type=float, default=5.0, help='lets be gentle to arxiv API (in number of seconds)')
   parser.add_argument('--break-on-no-added', type=int, default=1, help='break out early if all returned query papers are already in db? 1=yes, 0=no')
-  parser.add_argument('--category-counts', type=str, default='',
-                      help='Comma-separated list like "cs.AI=50,cs.CL=20" to fetch latest papers per category. Overrides --search-query.')
+  parser.add_argument('--category-counts', type=str, default=DEFAULT_CATEGORY_COUNTS,
+                      help='Comma-separated list like "cs.AI=50,cs.CL=20" to fetch latest papers per category. Overrides --search-query. Default caps: %s' % DEFAULT_CATEGORY_COUNTS)
   args = parser.parse_args()
 
   # lets load the existing database to memory
