@@ -181,7 +181,7 @@ def encode_json(ps, n=10, send_images=True, send_abstracts=True):
   libids = set()
   if g.user:
     # user is logged in, lets fetch their saved library data
-    uid = session['user_id']
+    uid = current_user_id()
     user_library = query_db('''select * from library where user_id = ?''', [uid])
     libids = {strip_version(x['paper_id']) for x in user_library}
 
@@ -365,7 +365,7 @@ def toggletag():
 
   pid = request.form['pid']
   comment_id = request.form['comment_id']
-  username = get_username(session['user_id'])
+  username = get_username(current_user_id())
   time_toggled = time.time()
   entry = {
     'username': username,
