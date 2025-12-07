@@ -12,7 +12,12 @@ pytz
 
 # the following are only for serve.py
 python-dateutil
-flask
-flask_limiter
+flask==1.1.4
+Werkzeug==1.0.1
+flask_limiter==1.1.0
+Jinja2==2.11.3
+MarkupSafe==2.0.1
+itsdangerous==1.1.0
+click==7.1.2
 tornado
 pymongo
