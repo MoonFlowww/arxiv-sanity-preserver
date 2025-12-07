@@ -97,24 +97,32 @@ h1 {
         height: auto;
         background-color: #840000;
         color: white;
+        padding: 18px 20px;
+        border-bottom: 1px solid #540000;
+}
 
-        padding-top: 20px;
-        padding-left: 20px;
+.header-bar {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 24px;
+        flex-wrap: wrap;
+}
 
-	border-bottom: 1px solid #540000;
 #tittxt {
-        width: 500px;
-        display: inline-block;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        max-width: 640px;
+        flex: 1 1 320px;
 }
 
 #header-actions {
-	    display: flex;
-        position: absolute;
-        top: 10px;
-        right: 10px;
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 16px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
 }
   
 
