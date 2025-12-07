@@ -226,7 +226,7 @@ def default_context(papers, **kws):
   except Exception as e:
     print(e)
 
-  ans = dict(papers=top_papers, numresults=len(papers), totpapers=len(db), tweets=[], msg='', show_prompt=show_prompt, pid_to_users={})
+  ans = dict(papers=top_papers, numresults=len(papers), totpapers=len(db), msg='', show_prompt=show_prompt, pid_to_users={})
   ans.update(kws)
   return ans
 
