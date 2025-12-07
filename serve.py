@@ -13,6 +13,7 @@ from flask import Flask, request, url_for, redirect, render_template, abort, g, 
 from flask_limiter import Limiter
 import pymongo
 
+from ingest_single_paper import ingest_paper
 from utils import safe_pickle_dump, strip_version, isvalidid, Config
 
 # various globals
@@ -456,6 +457,27 @@ def goaway():
     print('adding', uid, username, 'to goaway.')
     goaway_collection.insert_one({ 'uid':uid, 'time':int(time.time()) })
   return 'OK'
+
+@app.route('/ingest', methods=['POST'])
+def ingest_arxiv():
+  paper_id = request.form.get('paper_id', '').strip()
+  if paper_id == '':
+    flash('Please enter an arXiv identifier to add.')
+    return redirect(request.referrer or url_for('intmain'))
+
+  if not isvalidid(paper_id):
+    flash('Please provide a valid arXiv identifier, e.g., 1512.08756v2.')
+    return redirect(request.referrer or url_for('intmain'))
+
+  try:
+    ingest_paper(paper_id)
+  except Exception as e:
+    print(f'Error ingesting {paper_id}: {e}')
+    flash(f'Could not ingest {paper_id}: {e}')
+  else:
+    flash(f'Added {paper_id} and refreshed caches.')
+
+  return redirect(url_for('intmain'))
 
 @app.route("/")
 def intmain():

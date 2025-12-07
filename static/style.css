@@ -93,19 +93,28 @@ h1 {
 	margin: 0;
 }
 #titdiv {
-	width: auto;
-	height: 70px;
-	background-color: #840000;
-	color: white;
+        width: auto;
+        height: 100px;
+        background-color: #840000;
+        color: white;
 
-	padding-top: 20px;
-	padding-left: 20px;
+        padding-top: 20px;
+        padding-left: 20px;
 
 	border-bottom: 1px solid #540000;
 }
 #tittxt {
-	width: 500px;
-	display: inline-block;
+        width: 500px;
+        display: inline-block;
+}
+
+#header-actions {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
 }
 
 #maindiv {
@@ -269,11 +278,9 @@ h1 {
 #search_hint a:active{ color: #777; }
 
 #userinfo {
-	position: absolute;
-	top: 10px;
-	right: 150px;
-	color: white;
-	font-size: 16px;
+        position: relative;
+        color: white;
+        font-size: 16px;
 }
 .input-no-border {
 	border: none;
@@ -288,8 +295,59 @@ h1 {
 }
 
 #userinfo a {
-	border: 1px solid white;
-	padding: 5px;
+        border: 1px solid white;
+        padding: 5px;
+}
+
+#ingest-control {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+}
+
+#ingest-toggle {
+        width: 34px;
+        height: 34px;
+        background: #FFF;
+        color: #840000;
+        border: 1px solid #540000;
+        border-radius: 4px;
+        font-weight: bold;
+        font-size: 20px;
+        cursor: pointer;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+#ingest-toggle:disabled {
+        opacity: 0.6;
+        cursor: default;
+}
+
+#ingest-form {
+        display: none;
+        align-items: center;
+        gap: 6px;
+}
+
+#ingest-form.visible {
+        display: flex;
+}
+
+#ingest-form input {
+        padding: 6px 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        min-width: 190px;
+}
+
+#ingest-form button {
+        padding: 6px 10px;
+        border: 1px solid #540000;
+        border-radius: 4px;
+        background: #FFF;
+        color: #840000;
+        cursor: pointer;
+        font-weight: bold;
 }
 #titdiv a:link{ text-decoration: none; color: #FFF;}
 #titdiv a:visited{ text-decoration: none; color: #FFF;}

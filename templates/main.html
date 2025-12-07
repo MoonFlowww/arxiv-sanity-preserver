@@ -155,6 +155,19 @@ $(document).ready(function(){
   if( render_format === 'recommend') { d3.select('#tabrec').classed('tab-selected', true); }
   if( render_format === 'library') { d3.select('#tablib').classed('tab-selected', true); }
 
+  $("#ingest-toggle").on('click', function(e) {
+    e.preventDefault();
+    $("#ingest-form").toggleClass('visible');
+    if($("#ingest-form").hasClass('visible')) {
+      $("#ingest-id").focus();
+    }
+  });
+
+  $("#ingest-form").on('submit', function() {
+    $("#ingest-toggle").prop('disabled', true);
+    $("#ingest-form button[type='submit']").text('Adding...');
+  });
+
   $("#goaway").on('click', function(){
     $("#prompt").slideUp('fast');
     $.post("/goaway", {}).done(function(data){ });
@@ -169,9 +182,27 @@ $(document).ready(function(){
 
 <div id ="titdiv">
 
-  <!-- User account information on top right -->
-  <div id="userinfo">
-	<a href="{{ url_for('account') }}">Single-user: {{ g.user.username }}</a>
+  <div id="header-actions">
+    <!-- User account information on top right -->
+    <div id="userinfo">
+          <a href="{{ url_for('account') }}">Single-user: {{ g.user.username }}</a>
+    </div>
+
+    <!-- Quick ingest control -->
+    <div id="ingest-control">
+      <button id="ingest-toggle" aria-label="Add arXiv paper" title="Add arXiv paper">+</button>
+      <form id="ingest-form" method="post" action="{{ url_for('ingest_arxiv') }}">
+        <input
+          id="ingest-id"
+          name="paper_id"
+          type="text"
+          placeholder="arXiv id (e.g., 1512.08756v2)"
+          aria-label="arXiv identifier"
+          required
+        >
+        <button type="submit">Add</button>
+      </form>
+    </div>
   </div>
 
   <!-- Site information/banner on top left -->
