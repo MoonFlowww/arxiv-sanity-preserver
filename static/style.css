@@ -132,19 +132,21 @@ h1 {
 }
 
 #content-grid {
-        display: flex;
-        flex-direction: row;
-        align-items: flex-start;
-        gap: 20px;
+        display: grid;
+        grid-template-columns: 340px 1fr;
+        align-items: start;
+        gap: 26px;
 }
 
 #search-menu {
-        width: 280px;
-        background: #f7f4ec;
+        width: 100%;
+        max-width: 360px;
+        background: #fff;
         border: 1px solid #d6d3c5;
-        border-radius: 6px;
-        padding: 15px;
+        border-radius: 10px;
+        padding: 18px;
         height: fit-content;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
 }
 
 .search-menu-title {
@@ -194,6 +196,21 @@ h1 {
 
 #results-column {
         flex: 1;
+        min-width: 0;
+        display: flex;
+}
+
+.results-card {
+        background: #fff;
+        border: 1px solid #d6d3c5;
+        border-radius: 10px;
+        padding: 18px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        width: 100%;
+        box-sizing: border-box;
 }
 
 .apaper {
@@ -411,16 +428,14 @@ ul.flashes li {
 }
 
 #pagebar {
-	width: 970px;
-	padding: 10px 15px 0px 15px;
-	margin-left: auto;
-	margin-right: auto;
+        width: 100%;
+        padding: 12px 12px 6px 12px;
+        margin: 0;
 
-	border-top: solid 1px #D6D3C5;
-	border-left: solid 1px #D6D3C5;
-	border-right: solid 1px #D6D3C5;
-
-	background-color: #EEE;
+        border: 1px solid #D6D3C5;
+        border-radius: 8px;
+        background-color: #f4f1e8;
+        box-sizing: border-box;
 }
 .pagelink {
 	display: inline-block;
@@ -439,12 +454,10 @@ ul.flashes li {
 #pagebar a:active{ text-decoration: none; color: #338;}
 
 .centerdiv {
-	width: 970px;
-	padding: 10px 15px 0px 15px;
-	margin-left: auto;
-	margin-right: auto;
-	border-left: solid 1px #D6D3C5;
-	border-right: solid 1px #D6D3C5;
+        width: 100%;
+        padding: 12px 12px 0px 12px;
+        margin: 0;
+        box-sizing: border-box;
 }
 #recommend-time-choice {
 	background-color: #FFF;
