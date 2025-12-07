@@ -232,10 +232,20 @@ def teardown_request(exception):
 # search/sort functionality
 # -----------------------------------------------------------------------------
 
-def filter_papers(papers, topic_name='', classification='all', min_score=None):
+def _normalize_topics(topic_names):
+  if not topic_names:
+    return []
+  if isinstance(topic_names, str):
+    topic_names = [topic_names]
+  return [t for t in topic_names if t]
+
+
+def filter_papers(papers, topic_names=None, classification='all', min_score=None):
   filtered = papers
-  if topic_name:
-    filtered = [p for p in filtered if p.get('arxiv_primary_category', {}).get('term') == topic_name]
+  normalized_topics = _normalize_topics(topic_names)
+
+  if normalized_topics:
+    filtered = [p for p in filtered if p.get('arxiv_primary_category', {}).get('term') in normalized_topics]
 
   if classification and classification != 'all':
     filtered = [p for p in filtered if p.get('impact_classification') == classification]
@@ -246,13 +256,13 @@ def filter_papers(papers, topic_name='', classification='all', min_score=None):
   return filtered
 
 
-def papers_search(qraw, topic_name='', classification='all', min_score=None):
+def papers_search(qraw, topic_names=None, classification='all', min_score=None):
   qparts = qraw.lower().strip().split() if qraw else []
   scores = []
 
   if not qparts:
     base = [db[pid] for pid in DATE_SORTED_PIDS]
-    return filter_papers(base, topic_name=topic_name, classification=classification, min_score=min_score)
+    return filter_papers(base, topic_names=topic_names, classification=classification, min_score=min_score)
 
   # use reverse index and accumulate scores
   for pid, p in db.items():
@@ -264,7 +274,7 @@ def papers_search(qraw, topic_name='', classification='all', min_score=None):
     scores.append((score, p))
   scores.sort(reverse=True, key=lambda x: x[0]) # descending
   out = [x[1] for x in scores if x[0] > 0]
-  return filter_papers(out, topic_name=topic_name, classification=classification, min_score=min_score)
+  return filter_papers(out, topic_names=topic_names, classification=classification, min_score=min_score)
 
 def papers_similar(pid):
   rawpid = strip_version(pid)
@@ -426,6 +436,7 @@ def default_context(papers, **kws):
     topics=TOPICS,
     selected_topic='',
     selected_topic_display='',
+    selected_topics=[],
     selected_classification=kws.get('selected_classification', 'all'),
     min_score=kws.get('min_score', ''),
     search_query=kws.get('search_query', ''),
@@ -576,7 +587,11 @@ def toggletag():
 @app.route("/search", methods=['GET'])
 def search():
   q = request.args.get('q', '') # get the search request
-  topic_name = request.args.get('topic', '')
+  selected_topics = request.args.getlist('topics')
+  # support legacy single topic param if present
+  legacy_topic = request.args.get('topic', '')
+  if legacy_topic and legacy_topic not in selected_topics:
+    selected_topics.append(legacy_topic)
   classification = request.args.get('classification', 'all')
   min_score_str = request.args.get('min_score', '')
 
@@ -585,12 +600,13 @@ def search():
   except ValueError:
     min_score = None
 
-  papers = papers_search(q, topic_name=topic_name, classification=classification, min_score=min_score)
+  papers = papers_search(q, topic_names=selected_topics, classification=classification, min_score=min_score)
   ctx = default_context(
     papers,
     render_format="search",
-    selected_topic=topic_name,
-    selected_topic_display=translate_topic_name(topic_name) if topic_name else '',
+    selected_topic=legacy_topic,
+    selected_topic_display=translate_topic_name(legacy_topic) if legacy_topic else '',
+    selected_topics=selected_topics,
     selected_classification=classification,
     min_score=min_score_str,
     search_query=q,
