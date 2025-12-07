@@ -179,8 +179,7 @@ $(document).ready(function(){
 <body>
 <a href="https://github.com/karpathy/arxiv-sanity-preserver"><img style="position: absolute; top: 0; right: 0; border: 0;" src="https://camo.githubusercontent.com/38ef81f8aca64bb9a64448d0d70f1308ef5341ab/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f6461726b626c75655f3132313632312e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png"></a>
 
-<div id ="titdiv">
-
+<div id="titdiv">
   <!-- Left: title -->
   <a href="/">
     <div id="tittxt">
@@ -190,11 +189,12 @@ $(document).ready(function(){
     </div>
   </a>
 
-  <!-- Right: actions (Arxiv Code + add button + user info) -->
+  <!-- Right: Arxiv Code bar + user info -->
   <div id="header-actions">
     <div id="ingest-control">
       <button id="arxiv-code-btn" type="button">Arxiv Code</button>
       <button id="ingest-toggle" aria-label="Add arXiv paper" title="Add arXiv paper">+</button>
+
       <form id="ingest-form" method="post" action="{{ url_for('ingest_arxiv') }}">
         <input
           id="ingest-id"
@@ -212,7 +212,6 @@ $(document).ready(function(){
       <a href="{{ url_for('account') }}">Single-user: {{ g.user.username }}</a>
     </div>
   </div>
-
 </div>
 
 <div id="flashesdiv">
@@ -251,10 +250,11 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
 <div id="maindiv">
   <div id="content-grid">
 
-    <!-- Left column: search conditions -->
+    <!-- Left column: Search Condition block -->
     <aside id="search-menu">
       <div class="search-menu-title">Search Condition</div>
       <form action="/search" method="get" id="search-menu-form">
+
         <label for="qfield">Search Bar</label>
         <input name="q" type="text" id="qfield" value="{{ search_query }}" placeholder="Find papers or authors">
 
@@ -263,7 +263,9 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
           <select id="topic-select" name="topics" size="10" multiple>
             <option value="" {% if not selected_topics %}selected{% endif %}>All topics</option>
             {% for topic in topics %}
-              <option value="{{ topic.name }}" {% if topic.name in selected_topics %}selected{% endif %}>{{ topic.display_name }} ({{ topic.count }})</option>
+              <option value="{{ topic.name }}" {% if topic.name in selected_topics %}selected{% endif %}>
+                {{ topic.display_name }} ({{ topic.count }})
+              </option>
             {% endfor %}
           </select>
         </div>
@@ -271,7 +273,7 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
         <label for="min-score">Label Score &gt; X</label>
         <input name="min_score" id="min-score" type="number" step="0.1" min="0" value="{{ min_score }}" placeholder="e.g., 1.5">
 
-        <!-- keep classification dropdown, but it’s no longer the primary visual block -->
+        <!-- keep classification, just as an extra line -->
         <label for="classification-filter">Classification</label>
         <select id="classification-filter" name="classification">
           <option value="all" {% if selected_classification == 'all' %}selected{% endif %}>All classifications</option>
@@ -284,10 +286,8 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
       </form>
     </aside>
 
-    <!-- Center column: tabs + paper thread -->
+    <!-- Right column: tabs + paper thread -->
     <section id="results-column">
-
-      <!-- Tabs: Recent | Top Recent | ... now inside the paper column -->
       <div id="pagebar">
         <div class="pagelink" id="tabrecent"><a href="/">most recent</a></div>
         <div class="pagelink" id="tabtop"><a href="/top">top recent</a></div>
@@ -298,10 +298,8 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
         <div class="pagelink" id="tablib"><a href="/library">library</a></div>
       </div>
 
-      <!-- time-choice bar -->
       <div id="recommend-time-choice" class="centerdiv"></div>
 
-      <!-- Paper thread -->
       <div id="rtable"></div>
 
       <div id="loadmore">
@@ -311,6 +309,7 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
 
   </div>
 </div>
+
 
 <br><br><br><br><br><br>
 </body>
