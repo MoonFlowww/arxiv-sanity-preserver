@@ -119,12 +119,21 @@ h1 {
 
 #header-actions {
         display: flex;
-        align-items: center;
-        gap: 16px;
-        flex-wrap: wrap;
+        align-items: stretch;
+        gap: 12px;
+        flex: 1 1 260px;
         justify-content: flex-end;
 }
-  
+
+
+.header-actions-top {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 10px;
+        width: 100%;
+}
+
 
 
 #maindiv {
@@ -141,7 +150,7 @@ h1 {
 
 #content-grid {
         display: grid;
-        grid-template-columns: 340px 1fr;
+        grid-template-columns: 320px 1fr;
         align-items: start;
         gap: 26px;
 }
@@ -155,6 +164,8 @@ h1 {
         padding: 18px;
         height: fit-content;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+        position: sticky;
+        top: 20px;
 }
 
 .search-menu-title {
@@ -219,6 +230,11 @@ h1 {
         gap: 14px;
         width: 100%;
         box-sizing: border-box;
+}
+
+.section-heading {
+        font-size: 18px;
+        font-weight: bold;
 }
 
 .apaper {
