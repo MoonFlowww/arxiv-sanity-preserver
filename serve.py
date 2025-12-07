@@ -36,6 +36,138 @@ limiter = Limiter(app, global_limits=["100 per hour", "20 per minute"])
 TOPIC_PIDS = {}
 TOPICS = []
 
+# mapping of arXiv category identifiers to human-readable labels
+TOPIC_TRANSLATIONS = {
+  'astro-ph.CO': 'Cosmology and Nongalactic Astrophysics',
+  'astro-ph.GA': 'Astrophysics of Galaxies',
+  'astro-ph.HE': 'High Energy Astrophysical Phenomena',
+  'astro-ph.IM': 'Instrumentation and Methods for Astrophysics',
+  'cond-mat.dis-nn': 'Disordered Systems and Neural Networks',
+  'cond-mat.mes-hall': 'Mesoscale and Nanoscale Physics',
+  'cond-mat.mtrl-sci': 'Materials Science',
+  'cond-mat.quant-gas': 'Quantum Gases',
+  'cond-mat.soft': 'Soft Condensed Matter',
+  'cond-mat.stat-mech': 'Statistical Mechanics',
+  'cond-mat.str-el': 'Strongly Correlated Electrons',
+  'cs.AI': 'Artificial Intelligence',
+  'cs.AR': 'Hardware Architecture',
+  'cs.CC': 'Computational Complexity',
+  'cs.CE': 'Computational Engineering, Finance, and Science',
+  'cs.CG': 'Computational Geometry',
+  'cs.CL': 'Computation and Language',
+  'cs.CR': 'Cryptography and Security',
+  'cs.CV': 'Computer Vision and Pattern Recognition',
+  'cs.CY': 'Computers and Society',
+  'cs.DB': 'Databases',
+  'cs.DC': 'Distributed, Parallel, and Cluster Computing',
+  'cs.DL': 'Digital Libraries',
+  'cs.DM': 'Discrete Mathematics',
+  'cs.DS': 'Data Structures and Algorithms',
+  'cs.ET': 'Emerging Technologies',
+  'cs.FL': 'Formal Languages and Automata Theory',
+  'cs.GR': 'Graphics',
+  'cs.GT': 'Computer Science and Game Theory',
+  'cs.HC': 'Human-Computer Interaction',
+  'cs.IR': 'Information Retrieval',
+  'cs.IT': 'Information Theory',
+  'cs.LG': 'Machine Learning',
+  'cs.LO': 'Logic in Computer Science',
+  'cs.MA': 'Multiagent Systems',
+  'cs.MM': 'Multimedia',
+  'cs.MS': 'Mathematical Software',
+  'cs.NE': 'Neural and Evolutionary Computing',
+  'cs.NI': 'Networking and Internet Architecture',
+  'cs.OH': 'Other Computer Science',
+  'cs.OS': 'Operating Systems',
+  'cs.PF': 'Performance',
+  'cs.PL': 'Programming Languages',
+  'cs.RO': 'Robotics',
+  'cs.SD': 'Sound',
+  'cs.SE': 'Software Engineering',
+  'cs.SI': 'Social and Information Networks',
+  'econ.EM': 'Econometrics',
+  'econ.GN': 'General Economics',
+  'econ.TH': 'Theoretical Economics',
+  'eess.AS': 'Audio and Speech Processing',
+  'eess.IV': 'Image and Video Processing',
+  'eess.SP': 'Signal Processing',
+  'eess.SY': 'Systems and Control',
+  'gr-qc': 'General Relativity and Quantum Cosmology',
+  'hep-ex': 'High Energy Physics - Experiment',
+  'hep-lat': 'High Energy Physics - Lattice',
+  'hep-ph': 'High Energy Physics - Phenomenology',
+  'hep-th': 'High Energy Physics - Theory',
+  'math-ph': 'Mathematical Physics',
+  'math.AC': 'Commutative Algebra',
+  'math.AG': 'Algebraic Geometry',
+  'math.AP': 'Analysis of PDEs',
+  'math.CA': 'Classical Analysis and ODEs',
+  'math.CO': 'Combinatorics',
+  'math.CT': 'Category Theory',
+  'math.DG': 'Differential Geometry',
+  'math.DS': 'Dynamical Systems',
+  'math.FA': 'Functional Analysis',
+  'math.GM': 'General Mathematics',
+  'math.GT': 'Geometric Topology',
+  'math.HO': 'History and Overview',
+  'math.MG': 'Metric Geometry',
+  'math.NA': 'Numerical Analysis',
+  'math.OC': 'Optimization and Control',
+  'math.PR': 'Probability',
+  'math.QA': 'Quantum Algebra',
+  'math.RA': 'Rings and Algebras',
+  'math.ST': 'Statistics Theory',
+  'nlin.AO': 'Adaptation and Self-Organizing Systems',
+  'nlin.CD': 'Chaotic Dynamics',
+  'nlin.CG': 'Cellular Automata and Lattice Gases',
+  'nlin.PS': 'Pattern Formation and Solitons',
+  'nucl-th': 'Nuclear Theory',
+  'physics.acc-ph': 'Accelerator Physics',
+  'physics.ao-ph': 'Atmospheric and Oceanic Physics',
+  'physics.bio-ph': 'Biological Physics',
+  'physics.chem-ph': 'Chemical Physics',
+  'physics.comp-ph': 'Computational Physics',
+  'physics.data-an': 'Data Analysis, Statistics and Probability',
+  'physics.ed-ph': 'Physics Education',
+  'physics.flu-dyn': 'Fluid Dynamics',
+  'physics.geo-ph': 'Geophysics',
+  'physics.hist-ph': 'History and Philosophy of Physics',
+  'physics.ins-det': 'Instrumentation and Detectors',
+  'physics.med-ph': 'Medical Physics',
+  'physics.optics': 'Optics',
+  'physics.plasm-ph': 'Plasma Physics',
+  'physics.soc-ph': 'Physics and Society',
+  'physics.space-ph': 'Space Physics',
+  'q-bio.BM': 'Biomolecules',
+  'q-bio.CB': 'Cell Behavior',
+  'q-bio.GN': 'Genomics',
+  'q-bio.MN': 'Molecular Networks',
+  'q-bio.NC': 'Neurons and Cognition',
+  'q-bio.PE': 'Populations and Evolution',
+  'q-bio.QM': 'Quantitative Methods',
+  'q-bio.SC': 'Subcellular Processes',
+  'q-bio.TO': 'Tissues and Organs',
+  'q-fin.CP': 'Computational Finance',
+  'q-fin.GN': 'General Finance',
+  'q-fin.MF': 'Mathematical Finance',
+  'q-fin.PM': 'Portfolio Management',
+  'q-fin.PR': 'Pricing of Securities',
+  'q-fin.RM': 'Risk Management',
+  'q-fin.ST': 'Statistical Finance',
+  'q-fin.TR': 'Trading and Market Microstructure',
+  'quant-ph': 'Quantum Physics',
+  'stat.AP': 'Applications',
+  'stat.CO': 'Computation',
+  'stat.ME': 'Methodology',
+  'stat.ML': 'Machine Learning',
+}
+
+
+def translate_topic_name(topic_code):
+  """Return a human-readable label for an arXiv topic identifier."""
+
+  return TOPIC_TRANSLATIONS.get(topic_code, topic_code)
+
 # -----------------------------------------------------------------------------
 # utilities for database interactions 
 # -----------------------------------------------------------------------------
@@ -101,20 +233,49 @@ def teardown_request(exception):
 # search/sort functionality
 # -----------------------------------------------------------------------------
 
-def papers_search(qraw):
-  qparts = qraw.lower().strip().split() # split by spaces
-  # use reverse index and accumulate scores
+def _normalize_topics(topic_names):
+  if not topic_names:
+    return []
+  if isinstance(topic_names, str):
+    topic_names = [topic_names]
+  return [t for t in topic_names if t]
+
+
+def filter_papers(papers, topic_names=None, classification='all', min_score=None):
+  filtered = papers
+  normalized_topics = _normalize_topics(topic_names)
+
+  if normalized_topics:
+    filtered = [p for p in filtered if p.get('arxiv_primary_category', {}).get('term') in normalized_topics]
+
+  if classification and classification != 'all':
+    filtered = [p for p in filtered if p.get('impact_classification') == classification]
+
+  if min_score is not None:
+    filtered = [p for p in filtered if p.get('impact_score', 0) >= min_score]
+
+  return filtered
+
+
+def papers_search(qraw, topic_names=None, classification='all', min_score=None):
+  qparts = qraw.lower().strip().split() if qraw else []
   scores = []
-  for pid,p in db.items():
-    score = sum(SEARCH_DICT[pid].get(q,0) for q in qparts)
+
+  if not qparts:
+    base = [db[pid] for pid in DATE_SORTED_PIDS]
+    return filter_papers(base, topic_names=topic_names, classification=classification, min_score=min_score)
+
+  # use reverse index and accumulate scores
+  for pid, p in db.items():
+    score = sum(SEARCH_DICT[pid].get(q, 0) for q in qparts)
     if score == 0:
       continue # no match whatsoever, dont include
     # give a small boost to more recent papers
-    score += 0.0001*p['tscore']
+    score += 0.0001 * p['tscore']
     scores.append((score, p))
   scores.sort(reverse=True, key=lambda x: x[0]) # descending
   out = [x[1] for x in scores if x[0] > 0]
-  return out
+  return filter_papers(out, topic_names=topic_names, classification=classification, min_score=min_score)
 
 def papers_similar(pid):
   rawpid = strip_version(pid)
@@ -213,6 +374,8 @@ def encode_json(ps, n=10, send_images=True, send_abstracts=True):
     struct['link'] = p['link']
     struct['in_library'] = 1 if p['_rawid'] in libids else 0
     struct['citation_count'] = p.get('citation_count', 0)
+    struct['impact_score'] = p.get('impact_score', 0)
+    struct['impact_classification'] = p.get('impact_classification', 'slop')
     if send_abstracts:
       struct['abstract'] = p['summary']
     if send_images:
@@ -263,7 +426,22 @@ def default_context(papers, **kws):
   except Exception as e:
     print(e)
 
-  ans = dict(papers=top_papers, numresults=len(papers), totpapers=len(db), tweets=[], msg='', show_prompt=show_prompt, pid_to_users={}, topics=[], selected_topic='')
+  ans = dict(
+    papers=top_papers,
+    numresults=len(papers),
+    totpapers=len(db),
+    tweets=[],
+    msg='',
+    show_prompt=show_prompt,
+    pid_to_users={},
+    topics=TOPICS,
+    selected_topic='',
+    selected_topic_display='',
+    selected_topics=[],
+    selected_classification=kws.get('selected_classification', 'all'),
+    min_score=kws.get('min_score', ''),
+    search_query=kws.get('search_query', ''),
+  )
   ans.update(kws)
   return ans
 
@@ -431,8 +609,30 @@ def toggletag():
 @app.route("/search", methods=['GET'])
 def search():
   q = request.args.get('q', '') # get the search request
-  papers = papers_search(q) # perform the query and get sorted documents
-  ctx = default_context(papers, render_format="search")
+  selected_topics = request.args.getlist('topics')
+  # support legacy single topic param if present
+  legacy_topic = request.args.get('topic', '')
+  if legacy_topic and legacy_topic not in selected_topics:
+    selected_topics.append(legacy_topic)
+  classification = request.args.get('classification', 'all')
+  min_score_str = request.args.get('min_score', '')
+
+  try:
+    min_score = float(min_score_str) if min_score_str != '' else None
+  except ValueError:
+    min_score = None
+
+  papers = papers_search(q, topic_names=selected_topics, classification=classification, min_score=min_score)
+  ctx = default_context(
+    papers,
+    render_format="search",
+    selected_topic=legacy_topic,
+    selected_topic_display=translate_topic_name(legacy_topic) if legacy_topic else '',
+    selected_topics=selected_topics,
+    selected_classification=classification,
+    min_score=min_score_str,
+    search_query=q,
+  )
   return render_template('main.html', **ctx)
 
 @app.route('/topics', methods=['GET'])
@@ -442,13 +642,14 @@ def topics():
   topic_name = request.args.get('topic', '')
   vstr = request.args.get('vfilter', 'all')
   papers = papers_from_topic(topic_name, vfilter=vstr)
+  selected_topic_display = translate_topic_name(topic_name) if topic_name else ''
 
   if topic_name:
-    msg = 'Most recent papers in topic %s:' % (topic_name, ) if len(papers) > 0 else 'No papers found for topic %s.' % (topic_name, )
+    msg = 'Most recent papers in topic %s (%s):' % (selected_topic_display, topic_name) if len(papers) > 0 else 'No papers found for topic %s (%s).' % (selected_topic_display, topic_name)
   else:
     msg = 'Select an arXiv topic to browse recent papers.'
 
-  ctx = default_context(papers, render_format='topics', msg=msg, topics=TOPICS, selected_topic=topic_name)
+  ctx = default_context(papers, render_format='topics', msg=msg, topics=TOPICS, selected_topic=topic_name, selected_topic_display=selected_topic_display)
   return render_template('main.html', **ctx)
 
 @app.route('/recommend', methods=['GET'])
@@ -476,7 +677,7 @@ def top():
   papers = [p for p in top_sorted_papers if curtime - p['time_published'] < tt*24*60*60]
   papers = papers_filter_version(papers, vstr)
   ctx = default_context(papers, render_format='top',
-                        msg='Top papers based on OpenAlex citation counts:')
+                        msg='Top papers by OpenAlex recency-adjusted score:')
   return render_template('main.html', **ctx)
 
 @app.route('/toptwtr', methods=['GET'])
@@ -736,8 +937,12 @@ if __name__ == "__main__":
       continue
     TOPIC_PIDS.setdefault(topic, []).append(pid)
   TOPICS = sorted([
-    {'name': topic, 'count': len(pids)} for topic, pids in TOPIC_PIDS.items()
-  ], key=lambda x: x['name'])
+    {
+      'name': topic,
+      'count': len(pids),
+      'display_name': translate_topic_name(topic),
+    } for topic, pids in TOPIC_PIDS.items()
+  ], key=lambda x: x['display_name'])
 
   print('mongodb/tweets integration disabled (no MongoDB, or not needed)')
   client = None

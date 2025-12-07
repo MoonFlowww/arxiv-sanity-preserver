@@ -154,7 +154,6 @@ $(document).ready(function(){
   if( render_format === 'discussions') { d3.select('#tabdiscussions').classed('tab-selected', true); }
   if( render_format === 'recommend') { d3.select('#tabrec').classed('tab-selected', true); }
   if( render_format === 'library') { d3.select('#tablib').classed('tab-selected', true); }
-  if( render_format === 'topics') { d3.select('#tabtopics').classed('tab-selected', true); }
 
   $("#ingest-toggle").on('click', function(e) {
     e.preventDefault();
@@ -235,13 +234,6 @@ $(document).ready(function(){
 </div>
 {% endif %}
 
-<div id="sbox">
-  <form action="/search" method="get">
-  	<input name="q" type="text" id="qfield">
-  </form>
-  <div id="search_hint"></div>
-</div>
-
 {% if show_prompt == "yes" %}
 <div id="prompt" style="background-color:#f6ff7a; padding:10px; width:980px; margin-left:auto; margin-right:auto; font-size:14px;">
 Hey there {{ g.user.username }}, sorry to interrupt. Arxiv-sanity costs a non-negligible amount of money to host.
@@ -256,39 +248,60 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
 </div>
 {% endif %}
 
-{% if render_format == "topics" %}
-<div id="topic-picker" class="centerdiv">
-  <div class="topic-heading">Browse by arXiv topic</div>
-  <div class="topic-list">
-    {% for topic in topics %}
-      <a class="topic-pill {% if selected_topic == topic.name %}topic-pill-selected{% endif %}" href="/topics?topic={{ topic.name|urlencode }}">{{ topic.name }} ({{ topic.count }})</a>
-    {% endfor %}
-  </div>
-</div>
-{% endif %}
-
 <div id="pagebar">
   <div class="pagelink" id="tabrecent"><a href="/">most recent</a></div>
   <div class="pagelink" id="tabtop"><a href="/top">top recent</a></div>
   <div class="pagelink" id="tabtwtr"><a href="/toptwtr">top hype</a></div>
-  <div class="pagelink" id="tabtopics"><a href="/topics">topics</a></div>
   <div class="pagelink" id="tabfriends"><a href="/friends">friends</a></div>
   <div class="pagelink" id="tabdiscussions"><a href="/discussions">discussions</a></div>
   <div class="pagelink" id="tabrec"><a href="/recommend">recommended</a></div>
   <div class="pagelink" id="tablib"><a href="/library">library</a></div>
 </div>
 
-<!-- this div will be rendered into dynamcially at init with JS -->
-<div id="recommend-time-choice" class="centerdiv"></div>
-
 <div id="maindiv">
+  <div id="content-grid">
+    <aside id="search-menu">
+      <div class="search-menu-title">Search Menu</div>
+      <form action="/search" method="get" id="search-menu-form">
+        <label for="qfield">Keyword or researcher</label>
+        <input name="q" type="text" id="qfield" value="{{ search_query }}" placeholder="Find papers or authors">
 
-<div id="rtable"></div>
+        <label for="classification-filter">Classification</label>
+        <select id="classification-filter" name="classification">
+          <option value="all" {% if selected_classification == 'all' %}selected{% endif %}>All classifications</option>
+          <option value="hot" {% if selected_classification == 'hot' %}selected{% endif %}>Hot (score ≥ 2.0)</option>
+          <option value="neutral" {% if selected_classification == 'neutral' %}selected{% endif %}>Neutral (1.0–2.0)</option>
+          <option value="slop" {% if selected_classification == 'slop' %}selected{% endif %}>Slop (score &lt; 1.0)</option>
+        </select>
 
-<div id="loadmore">
-  <button id="loadmorebtn">Load more</button>
-</div>
+        <label for="min-score">Minimum score</label>
+        <input name="min_score" id="min-score" type="number" step="0.1" min="0" value="{{ min_score }}" placeholder="e.g., 1.5">
 
+        <label for="topic-select">Topics</label>
+        <div class="topic-scroll">
+          <select id="topic-select" name="topics" size="10" multiple>
+            <option value="" {% if not selected_topics %}selected{% endif %}>All topics</option>
+            {% for topic in topics %}
+              <option value="{{ topic.name }}" {% if topic.name in selected_topics %}selected{% endif %}>{{ topic.display_name }} ({{ topic.count }})</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <button type="submit" class="primary-btn">Apply filters</button>
+      </form>
+    </aside>
+
+    <section id="results-column">
+      <!-- this div will be rendered into dynamcially at init with JS -->
+      <div id="recommend-time-choice" class="centerdiv"></div>
+
+      <div id="rtable"></div>
+
+      <div id="loadmore">
+        <button id="loadmorebtn">Load more</button>
+      </div>
+    </section>
+  </div>
 </div>
 
 <br><br><br><br><br><br>

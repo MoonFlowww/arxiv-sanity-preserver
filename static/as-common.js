@@ -120,9 +120,15 @@ function addPapers(num, dynamic) {
     tdiv.append('span').classed('cs', true).html(build_categories_html(p.tags));
     tdiv.append('br');
     tdiv.append('span').classed('ccs', true).html(p.comment);
+    var impactRow = tdiv.append('div').classed('impact-row', true);
+    if(typeof p.impact_score !== 'undefined') {
+      var classLabel = (p.impact_classification || 'slop');
+      var labelPretty = classLabel.charAt(0).toUpperCase() + classLabel.slice(1);
+      impactRow.append('span').classed('impact-score', true).html('Score: ' + p.impact_score.toFixed(2));
+      impactRow.append('span').classed('impact-chip ' + classLabel, true).html(labelPretty);
+    }
     if(typeof p.citation_count !== 'undefined') {
-      tdiv.append('br');
-      tdiv.append('span').classed('cit', true).html('Citations: ' + p.citation_count);
+      impactRow.append('span').classed('cit', true).html('Citations: ' + p.citation_count);
     }
 
     // action items for each paper
