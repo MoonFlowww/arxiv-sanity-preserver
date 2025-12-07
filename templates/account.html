@@ -182,18 +182,7 @@ $(document).ready(function(){
 
   <!-- User account information on top right -->
   <div id="userinfo">
-    {% if not g.user %}
-    <form action="{{ url_for('login') }}" method="post">
-      User:
-      <input type="text" name="username" class="input-no-border">
-      Pass:
-      <input type="password" name="password" class="input-no-border">
-      <input type="submit" value="Login or Create" class="btn-fancy">
-    </form>
-    {% else %}
-    {{ g.user.username }}
-    <a href="{{ url_for('logout') }}">log out</a>
-    {% endif %}
+    Single-user mode: {{ g.user.username }}
   </div>
 
   <!-- Site information/banner on top left -->
@@ -207,32 +196,12 @@ $(document).ready(function(){
 </div>
 
 <div id="maindiv">
-
-  {% if g.user %}
   <div>
-    <h1>Friends</h1>
-    <div id="ffdesc">
-      You can follow your friends on arxiv-sanity. This will populate the "friends"
-      tab of arxiv-sanity, which shows recent papers sorted by how popular they are
-      with your friends. In the lists below, <span style="color:#090">green background</span> indicates an active connection,
-      and <span style="color:#f00">red background</span> indicates a pending connection.
-    </div>
-
-    <div id="followers" class='userlst'>
-    </div>
-
-    <div id="following" class='userlst'>
-    </div>
-
-    <div id="addfollowing">
-      Ask for permission to follow:
-      <form action="/requestfollow" method="post">
-        <input type="input" name="newf" value="" class="newf-input">
-        <input type="submit" value="Add" class="newf-btn" style="width:100px;">
-      </form>
+        <h1>Single-user mode</h1>
+    <div>
+      This local installation runs without logins. Your personal library and recommendations are available under a shared local account.
     </div>
   </div>
-  {% endif %}
   
 </div>
 
