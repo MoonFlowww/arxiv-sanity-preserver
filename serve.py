@@ -9,10 +9,8 @@ from random import shuffle, randrange, uniform
 import numpy as np
 from sqlite3 import dbapi2 as sqlite3
 from hashlib import md5
-from flask import Flask, request, session, url_for, redirect, \
-     render_template, abort, g, flash, _app_ctx_stack
+from flask import Flask, request, url_for, redirect, render_template, abort, g, flash, _app_ctx_stack
 from flask_limiter import Limiter
-from werkzeug.security import check_password_hash, generate_password_hash
 import pymongo
 
 from utils import safe_pickle_dump, strip_version, isvalidid, Config
@@ -21,6 +19,10 @@ from utils import safe_pickle_dump, strip_version, isvalidid, Config
 # -----------------------------------------------------------------------------
 
 # database configuration
+# single-user mode constants
+SINGLE_USER_ID = 1
+SINGLE_USER_USERNAME = os.environ.get('ASP_SINGLE_USER_NAME', 'localuser')
+
 if os.path.isfile('secret_key.txt'):
   SECRET_KEY = open('secret_key.txt', 'r').read()
 else:
@@ -56,6 +58,23 @@ def get_username(user_id):
                 [user_id], one=True)
   return rv[0] if rv else None
 
+
+def ensure_single_user():
+  """Ensure the single local user exists and return its row."""
+  user = query_db('select * from user where user_id = ?', [SINGLE_USER_ID], one=True)
+  if user:
+    return user
+
+  creation_time = int(time.time())
+  g.db.execute('''insert into user (user_id, username, pw_hash, creation_time) values (?, ?, ?, ?)''',
+               [SINGLE_USER_ID, SINGLE_USER_USERNAME, 'local-mode', creation_time])
+  g.db.commit()
+  return query_db('select * from user where user_id = ?', [SINGLE_USER_ID], one=True)
+
+def current_user_id():
+  """Return the identifier for the single local user."""
+  return SINGLE_USER_ID
+
 # -----------------------------------------------------------------------------
 # connection handlers
 # -----------------------------------------------------------------------------
@@ -64,11 +83,8 @@ def get_username(user_id):
 def before_request():
   # this will always request database connection, even if we dont end up using it ;\
   g.db = connect_db()
-  # retrieve user object from the database if user_id is set
-  g.user = None
-  if 'user_id' in session:
-    g.user = query_db('select * from user where user_id = ?',
-                      [session['user_id']], one=True)
+  # single-user mode: always ensure a default user is present
+  g.user = ensure_single_user()
 
 @app.teardown_request
 def teardown_request(exception):
@@ -124,7 +140,7 @@ def papers_from_library():
   out = []
   if g.user:
     # user is logged in, lets fetch their saved library data
-    uid = session['user_id']
+    uid = current_user_id()
     user_library = query_db('''select * from library where user_id = ?''', [uid])
     libids = [strip_version(x['paper_id']) for x in user_library]
     out = [db[x] for x in libids]
@@ -135,7 +151,7 @@ def papers_from_svm(recent_days=None):
   out = []
   if g.user:
 
-    uid = session['user_id']
+    uid = current_user_id()
     if not uid in user_sim:
       return []
     
@@ -215,8 +231,8 @@ def default_context(papers, **kws):
   # prompt logic
   show_prompt = 'no'
   try:
-    if Config.beg_for_hosting_money and g.user and uniform(0,1) < 0.05:
-      uid = session['user_id']
+    if Config.beg_for_hosting_money and g.user and goaway_collection is not None and uniform(0,1) < 0.05:
+      uid = current_user_id()
       entry = goaway_collection.find_one({ 'uid':uid })
       if not entry:
         lib_count = query_db('''select count(*) from library where user_id = ?''', [uid], one=True)
@@ -232,11 +248,13 @@ def default_context(papers, **kws):
 
 @app.route('/goaway', methods=['POST'])
 def goaway():
+  if goaway_collection is None:
+    return 'OK'
   if not g.user: return # weird
-  uid = session['user_id']
+  uid = current_user_id()
   entry = goaway_collection.find_one({ 'uid':uid })
   if not entry: # ok record this user wanting it to stop
-    username = get_username(session['user_id'])
+    username = get_username(current_user_id())
     print('adding', uid, username, 'to goaway.')
     goaway_collection.insert_one({ 'uid':uid, 'time':int(time.time()) })
   return 'OK'
@@ -286,7 +304,7 @@ def comment():
   anon = int(request.form['anon'])
 
   if g.user and (not anon):
-    username = get_username(session['user_id'])
+    username = get_username(current_user_id())
   else:
     # generate a unique username if user wants to be anon, or user not logged in.
     username = 'anon-%s-%s' % (str(int(time.time())), str(randrange(1000)))
@@ -424,10 +442,7 @@ def library():
   """ render user's library """
   papers = papers_from_library()
   ret = encode_json(papers, 500) # cap at 500 papers in someone's library. that's a lot!
-  if g.user:
-    msg = '%d papers in your library:' % (len(ret), )
-  else:
-    msg = 'You must be logged in. Once you are, you can save papers to your library (with the save icon on the right of each paper) and they will show up here.'
+  msg = '%d papers in your library:' % (len(ret), )
   ctx = default_context(papers, render_format='library', msg=msg)
   return render_template('main.html', **ctx)
 
@@ -446,7 +461,7 @@ def review():
   if not pid in db:
     return 'NO' # we don't know this paper. wat
 
-  uid = session['user_id'] # id of logged in user
+  uid = current_user_id()
 
   # check this user already has this paper in library
   record = query_db('''select * from library where
@@ -478,11 +493,16 @@ def friends():
     legend = {'day':1, '3days':3, 'week':7, 'month':30, 'year':365}
     tt = legend.get(ttstr, 7)
 
+    if follow_collection is None:
+         ctx = default_context([], render_format='friends', pid_to_users={}, msg='Following is disabled in single-user mode.')
+         return render_template('main.html', **ctx)
+
+
     papers = []
     pid_to_users = {}
     if g.user:
         # gather all the people we are following
-        username = get_username(session['user_id'])
+        username = get_username(current_user_id())
         edges = list(follow_collection.find({ 'who':username }))
         # fetch all papers in all of their libraries, and count the top ones
         counts = {}
@@ -507,13 +527,10 @@ def friends():
         # trim counts as well correspondingly
         pid_to_users = { p['_rawid'] : counts.get(p['_rawid'], []) for p in papers }
 
-    if not g.user:
-        msg = "You must be logged in and follow some people to enjoy this tab."
+    if len(papers) == 0:
+        msg = "No friend papers present."
     else:
-        if len(papers) == 0:
-            msg = "No friend papers present. Try to extend the time range, or add friends by clicking on your account name (top, right)"
-        else:
-            msg = "Papers in your friend's libraries:"
+        msg = "Papers in your friend's libraries:"
 
     ctx = default_context(papers, render_format='friends', pid_to_users=pid_to_users, msg=msg)
     return render_template('main.html', **ctx)
@@ -525,8 +542,8 @@ def account():
     followers = []
     following = []
     # fetch all followers/following of the logged in user
-    if g.user:
-        username = get_username(session['user_id'])
+    if g.user and follow_collection is not None:
+        username = get_username(current_user_id())
         
         following_db = list(follow_collection.find({ 'who':username }))
         for e in following_db:
@@ -542,9 +559,12 @@ def account():
 
 @app.route('/requestfollow', methods=['POST'])
 def requestfollow():
+    if follow_collection is None:
+        flash('Following is disabled in single-user mode.')
+        return redirect(url_for('account'))
     if request.form['newf'] and g.user:
         # add an entry: this user is requesting to follow a second user
-        who = get_username(session['user_id'])
+        who = get_username(current_user_id())
         whom = request.form['newf']
         # make sure whom exists in our database
         whom_id = get_user_id(whom)
@@ -560,8 +580,10 @@ def requestfollow():
 def removefollow():
     user = request.form['user']
     lst = request.form['lst']
+    if follow_collection is None:
+        return 'NOTOK'
     if user and lst:
-        username = get_username(session['user_id'])
+        username = get_username(current_user_id())
         if lst == 'followers':
             # user clicked "X" in their followers list. Erase the follower of this user
             who = user
@@ -584,8 +606,10 @@ def removefollow():
 def addfollow():
     user = request.form['user']
     lst = request.form['lst']
+    if follow_collection is None:
+        return 'NOTOK'
     if user and lst:
-        username = get_username(session['user_id'])
+        username = get_username(current_user_id())
         if lst == 'followers':
             # user clicked "OK" in the followers list, wants to approve some follower. make active.
             who = user
@@ -599,42 +623,13 @@ def addfollow():
 
 @app.route('/login', methods=['POST'])
 def login():
-  """ logs in the user. if the username doesn't exist creates the account """
-  
-  if not request.form['username']:
-    flash('You have to enter a username')
-  elif not request.form['password']:
-    flash('You have to enter a password')
-  elif get_user_id(request.form['username']) is not None:
-    # username already exists, fetch all of its attributes
-    user = query_db('''select * from user where
-          username = ?''', [request.form['username']], one=True)
-    if check_password_hash(user['pw_hash'], request.form['password']):
-      # password is correct, log in the user
-      session['user_id'] = get_user_id(request.form['username'])
-      flash('User ' + request.form['username'] + ' logged in.')
-    else:
-      # incorrect password
-      flash('User ' + request.form['username'] + ' already exists, wrong password.')
-  else:
-    # create account and log in
-    creation_time = int(time.time())
-    g.db.execute('''insert into user (username, pw_hash, creation_time) values (?, ?, ?)''',
-      [request.form['username'], 
-      generate_password_hash(request.form['password']), 
-      creation_time])
-    user_id = g.db.execute('select last_insert_rowid()').fetchall()[0][0]
-    g.db.commit()
-
-    session['user_id'] = user_id
-    flash('New account %s created' % (request.form['username'], ))
-  
+  """Single-user mode: login is disabled."""
+  flash('Login is disabled in single-user mode. Using the local account instead.')
   return redirect(url_for('intmain'))
 
 @app.route('/logout')
 def logout():
-  session.pop('user_id', None)
-  flash('You were logged out')
+  flash('Single-user mode is always active; logout is disabled.')
   return redirect(url_for('intmain'))
 
 # -----------------------------------------------------------------------------
