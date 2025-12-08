@@ -50,6 +50,45 @@ var show_prompt = "{{ show_prompt }}";
 
 var urlq = ''; // global will be read in to QueryString when load is done
 
+var ingestProgressSteps = [
+  { label: 'Validating identifier...', percent: 12 },
+  { label: 'Fetching arXiv metadata...', percent: 32 },
+  { label: 'Downloading PDF...', percent: 58 },
+  { label: 'Extracting text from PDF...', percent: 78 },
+  { label: 'Refreshing caches...', percent: 100 }
+];
+var ingestStepIndex = 0;
+var ingestProgressTimer = null;
+
+function updateIngestProgress(step) {
+  var status = $('#ingest-status-text');
+  var bar = $('#ingest-progress-bar');
+  var progressShell = $('.ingest-progress');
+
+  status.text(step.label);
+  bar.css('width', step.percent + '%');
+  progressShell.attr('aria-valuenow', step.percent);
+}
+
+function showIngestOverlay() {
+  var overlay = $('#ingest-overlay');
+
+  if(ingestProgressTimer) { clearInterval(ingestProgressTimer); }
+  ingestStepIndex = 0;
+  updateIngestProgress(ingestProgressSteps[ingestStepIndex]);
+
+  overlay.attr('aria-hidden', 'false').addClass('visible');
+
+  ingestProgressTimer = setInterval(function(){
+    if(ingestStepIndex < ingestProgressSteps.length - 1) {
+      ingestStepIndex += 1;
+      updateIngestProgress(ingestProgressSteps[ingestStepIndex]);
+    } else {
+      clearInterval(ingestProgressTimer);
+    }
+  }, 1200);
+}
+
 // when page loads...
 $(document).ready(function(){
 
@@ -115,6 +154,13 @@ $(document).ready(function(){
         });
         topicTags.removeClass('limited');
       }
+    });
+  }
+
+  var ingestForm = $('#ingest-form');
+  if(ingestForm.length) {
+    ingestForm.on('submit', function(){
+      showIngestOverlay();
     });
   }
 
@@ -257,6 +303,24 @@ $(document).ready(function(){
         <button type="reset" class="btn-secondary">Reset</button>
       </div>
     </form>
+
+    <div class="ingest-card">
+      <h3>Add a paper</h3>
+      <form id="ingest-form" class="ingest-form" method="post" action="/ingest">
+        <div class="filter-group">
+          <label for="paper-id-input">arXiv identifier</label>
+          <input
+            id="paper-id-input"
+            name="paper_id"
+            type="text"
+            placeholder="e.g. 1512.08756v2"
+            required
+          />
+        </div>
+        <p class="ingest-help">We will download the PDF, extract text, and refresh caches for the new paper.</p>
+        <button type="submit" class="btn-primary">Add paper</button>
+      </form>
+    </div>
   </aside>
 
   <!-- MAIN CONTENT: PAPERS -->
@@ -292,6 +356,17 @@ $(document).ready(function(){
     </div>
   </main>
 
+</div>
+
+<div class="ingest-overlay" id="ingest-overlay" aria-hidden="true">
+  <div class="ingest-modal" role="dialog" aria-labelledby="ingest-modal-title" aria-describedby="ingest-status-text">
+    <h3 id="ingest-modal-title">Adding new paper</h3>
+    <p class="ingest-status" id="ingest-status-text">Preparing to start the ingest process...</p>
+    <div class="ingest-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="8">
+      <div class="ingest-progress-bar" id="ingest-progress-bar" style="width: 8%;"></div>
+    </div>
+    <p class="ingest-note">We'll download the PDF, extract the text, and refresh caches. Feel free to keep this tab open while we work.</p>
+  </div>
 </div>
 
 <br><br>
