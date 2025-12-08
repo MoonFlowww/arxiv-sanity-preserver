@@ -86,73 +86,10 @@ $(document).ready(function(){
 		d3.select("#qfield").attr('value', urlq.replace(/\+/g, " "));
 	}
 
-  var vf = QueryString.vfilter; if(typeof vf === 'undefined') { vf = 'all'; }
-  var tf = QueryString.timefilter; if(typeof tf === 'undefined') { tf = 'week'; }
-  var link_endpoint = '/';
-  if(render_format === 'recent') { link_endpoint = ''; }
-  if(render_format === 'top') { link_endpoint = 'top'; }
-  if(render_format === 'recommend') { link_endpoint = 'recommend'; }
-  if(render_format === 'friends') { link_endpoint = 'friends'; }
-  if(render_format === 'toptwtr') { link_endpoint = 'toptwtr'; }
-  if(render_format === 'discussions') { link_endpoint = 'discussions'; }
-
-  var time_ranges = ['day', '3days', 'week', 'month', 'year', 'alltime'];
-  var time_txt = {'day':'Last day', '3days': 'Last 3 days', 'week': 'Last week', 'month': 'Last month', 'year': 'Last year', 'alltime': 'All time'}
-  var time_range = tf;
-
-  // set up time filtering options
-  if(render_format === 'recommend' || render_format === 'top' || render_format === 'recent' || render_format === 'friends') {
-    // insert version filtering options for these views
-    var elt = d3.select('#recommend-time-choice');
-    var vflink = vf === 'all' ? '1' : 'all'; // toggle only showing v1 or not
-    if(render_format === 'recent') {
-      var aelt = elt.append('a').attr('href', '/'+link_endpoint+'?'+'&vfilter='+vflink); // leave out timefilter from this page
-    } else {
-      var aelt = elt.append('a').attr('href', '/'+link_endpoint+'?'+'timefilter='+time_range+'&vfilter='+vflink);
-    }
-    var delt = aelt.append('div').classed('vchoice', true).html('Only show v1');
-    if(vf === '1') { delt.classed('vchoice-selected', true); }
-  }
-
-  // time choices for recommend/top
-  if(render_format === 'recommend' || render_format === 'top' || render_format === 'friends') {
-    // insert time filtering options for these two views
-    var elt = d3.select('#recommend-time-choice');
-    elt.append('div').classed('fdivider', true).html('|');
-    for(var i=0;i<time_ranges.length;i++) {
-      var time_range = time_ranges[i];
-      var aelt = elt.append('a').attr('href', '/'+link_endpoint+'?'+'timefilter='+time_range+'&vfilter='+vf);
-      var delt = aelt.append('div').classed('timechoice', true).html(time_txt[time_range]);
-      if(tf == time_range) { delt.classed('timechoice-selected', true); } // also render as chosen
-    }
-  }
-
-  // time choices for top tweets
-  if(render_format === 'toptwtr') {
-    var tf = QueryString.timefilter; if(typeof tf === 'undefined') { tf = 'day'; } // default here is day
-    var time_ranges = ['day', 'week', 'month'];
-    var elt = d3.select('#recommend-time-choice');
-    for(var i=0;i<time_ranges.length;i++) {
-      var time_range = time_ranges[i];
-      var aelt = elt.append('a').attr('href', '/'+link_endpoint+'?'+'timefilter='+time_range);
-      var delt = aelt.append('div').classed('timechoice', true).html(time_txt[time_range]);
-      if(tf == time_range) { delt.classed('timechoice-selected', true); } // also render as chosen
-    }
-  }
-
   var xb = $("#xbanner");
   if(xb.length !== 0) {
     xb.click(function(){ $("#banner").slideUp('fast'); })
   }
-
-  // in top tab: color current choice
-  if( render_format === 'recent') { d3.select('#tabrecent').classed('tab-selected', true); }
-  if( render_format === 'top') { d3.select('#tabtop').classed('tab-selected', true); }
-  if( render_format === 'toptwtr') { d3.select('#tabtwtr').classed('tab-selected', true); }
-  if( render_format === 'friends') { d3.select('#tabfriends').classed('tab-selected', true); }
-  if( render_format === 'discussions') { d3.select('#tabdiscussions').classed('tab-selected', true); }
-  if( render_format === 'recommend') { d3.select('#tabrec').classed('tab-selected', true); }
-  if( render_format === 'library') { d3.select('#tablib').classed('tab-selected', true); }
 
   $("#goaway").on('click', function(){
     $("#prompt").slideUp('fast');
@@ -164,27 +101,10 @@ $(document).ready(function(){
 </head>
 
 <body>
-<a href="https://github.com/karpathy/arxiv-sanity-preserver"><img style="position: absolute; top: 0; right: 0; border: 0; z-index: 1000;" src="https://camo.githubusercontent.com/38ef81f8aca64bb9a64448d0d70f1308ef5341ab/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f6461726b626c75655f3132313632312e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png"></a>
 
 <!-- HEADER -->
 <div id="titdiv">
-  <!-- User account information on top right -->
-  <div id="userinfo">
-    {% if not g.user %}
-    <form action="{{ url_for('login') }}" method="post" style="display: flex; align-items: center; gap: 0.5rem;">
-      <span style="margin-right: 0.5rem;">User:</span>
-      <input type="text" name="username" class="input-no-border" placeholder="Username">
-      <span>Pass:</span>
-      <input type="password" name="password" class="input-no-border" placeholder="Password">
-      <input type="submit" value="Login or Create" class="btn-fancy">
-    </form>
-    {% else %}
-    <a href="{{ url_for('account') }}">{{ g.user.username }}</a>
-    <a href="{{ url_for('logout') }}">log out</a>
-    {% endif %}
-  </div>
-
-  <!-- Site information/banner on top left -->
+  <!-- Site information/banner -->
   <a href="/">
     <div id="tittxt">
       <h1>Arxiv Sanity Preserver</h1>
@@ -210,7 +130,7 @@ $(document).ready(function(){
 </div>
 
 <!-- BANNER -->
-{% if render_format == "recent" and g.user.username is not defined %}
+{% if render_format == "recent" %}
 <div id="banner">
   <div style="float:right;cursor:pointer;" id="xbanner">X</div>
   New to arxiv-sanity? Check out the <a href="https://youtu.be/S2GY3gh6qC8" target="_blank">introduction video</a>.
@@ -220,7 +140,7 @@ $(document).ready(function(){
 <!-- DONATION PROMPT -->
 {% if show_prompt == "yes" %}
 <div id="prompt" style="background-color:#fef3c7; padding:1rem; max-width:1400px; margin:1rem auto; font-size:14px; border-radius:0.5rem; border:1px solid #f59e0b;">
-Hey there {{ g.user.username }}, sorry to interrupt. Arxiv-sanity costs a non-negligible amount of money to host. 
+Hey there, sorry to interrupt. Arxiv-sanity costs a non-negligible amount of money to host. 
 If you love the site, please consider pitching in:
   <form action="https://www.paypal.com/cgi-bin/webscr" method="post" target="_top" style="display:inline-block;">
   <input type="hidden" name="cmd" value="_s-xclick">
@@ -232,36 +152,20 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
 </div>
 {% endif %}
 
-<!-- SEARCH BOX -->
-<div id="sbox">
-  <form action="/search" method="get">
-    <input name="q" type="text" id="qfield" placeholder="Search papers...">
-  </form>
-  <div id="search_hint"></div>
-</div>
-
-<!-- PAGE BAR (NAVIGATION TABS) -->
-<div id="pagebar">
-  <div class="pagelink" id="tabrecent"><a href="/">most recent</a></div>
-  <div class="pagelink" id="tabtop"><a href="/top">top recent</a></div>
-  <div class="pagelink" id="tabtwtr"><a href="/toptwtr">top hype</a></div>
-  <div class="pagelink" id="tabfriends"><a href="/friends">friends</a></div>
-  <div class="pagelink" id="tabdiscussions"><a href="/discussions">discussions</a></div>
-  <div class="pagelink" id="tabrec"><a href="/recommend">recommended</a></div>
-  <div class="pagelink" id="tablib"><a href="/library">library</a></div>
-</div>
-
-<!-- TIME FILTERING OPTIONS -->
-<div id="recommend-time-choice" class="centerdiv"></div>
-
 <!-- MAIN LAYOUT: SIDEBAR + CONTENT -->
 <div class="layout-container">
   
   <!-- SIDEBAR: FILTERS -->
   <aside class="filter-panel">
     <h2>Filters</h2>
-    <form class="filter-form" method="get">
+    <form class="filter-form" method="get" action="/search">
       
+      <!-- SEARCH BAR -->
+      <div class="filter-group">
+        <label for="qfield">Search</label>
+        <input name="q" type="search" id="qfield" placeholder="Keywords...">
+      </div>
+
       <!-- TOPICS (Multi-select tags) -->
       <div class="filter-group">
         <label>Topics</label>
@@ -306,9 +210,29 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
         />
       </div>
 
+      <!-- SORT OPTIONS -->
+      <div class="sort-options">
+        <div class="filter-group">
+          <label for="sortby">Sort By</label>
+          <select id="sortby" name="sortby">
+            <option value="date">Date</option>
+            <option value="score">Score</option>
+            <option value="citation">Citation</option>
+          </select>
+        </div>
+        
+        <div class="filter-group">
+          <label for="sortorder">Order</label>
+          <select id="sortorder" name="sortorder">
+            <option value="desc">Desc</option>
+            <option value="asc">Asc</option>
+          </select>
+        </div>
+      </div>
+
       <!-- ACTIONS -->
       <div class="filter-actions">
-        <button type="submit" class="btn-primary">Apply Filters</button>
+        <button type="submit" class="btn-primary">Apply</button>
         <button type="reset" class="btn-secondary">Reset</button>
       </div>
     </form>
