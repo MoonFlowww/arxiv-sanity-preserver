@@ -144,13 +144,17 @@ h1 {
 
 /* SIDEBAR */
 .filter-panel {
-	width: 280px;
-	padding: 1.5rem 1rem;
-	background: #111827;
-	color: #f9fafb;
-	display: flex;
-	flex-direction: column;
-	border-right: 1px solid #1f2937;
+        width: 280px;
+        padding: 1.5rem 1rem;
+        background: #111827;
+        color: #f9fafb;
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid #1f2937;
+        position: sticky;
+        top: 1rem;
+        height: calc(100vh - 2rem);
+        overflow-y: auto;
 }
 
 .filter-panel h2 {
@@ -1151,7 +1155,11 @@ ul.flashes li {
                 width: 100%;
                 border-right: none;
                 border-bottom: 1px solid #1f2937;
-	}
+                position: static;
+                top: auto;
+                height: auto;
+                overflow: visible;
+        }
 	
 	#maindiv {
 		padding: 1rem;
