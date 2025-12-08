@@ -53,13 +53,13 @@ var urlq = ''; // global will be read in to QueryString when load is done
 // when page loads...
 $(document).ready(function(){
 
-  urlq = QueryString.q;
+	urlq = QueryString.q;
 
   // display message, if any
   if(msg !== '') { d3.select("#rtable").append('div').classed('msg', true).html(msg); }
 
   // add papers to #rtable
-  var done = addPapers(10, false);
+	var done = addPapers(10, false);
   if(done) { $("#loadmorebtn").hide(); }
 
   // set up inifinite scrolling for adding more papers
@@ -82,9 +82,9 @@ $(document).ready(function(){
 
   if(papers.length === 0) { $("#loadmorebtn").hide(); }
 
-  if(!(typeof urlq == 'undefined')) {
-    d3.select("#qfield").attr('value', urlq.replace(/\+/g, " "));
-  }
+	if(!(typeof urlq == 'undefined')) {
+		d3.select("#qfield").attr('value', urlq.replace(/\+/g, " "));
+	}
 
   var vf = QueryString.vfilter; if(typeof vf === 'undefined') { vf = 'all'; }
   var tf = QueryString.timefilter; if(typeof tf === 'undefined') { tf = 'week'; }
@@ -95,18 +95,17 @@ $(document).ready(function(){
   if(render_format === 'friends') { link_endpoint = 'friends'; }
   if(render_format === 'toptwtr') { link_endpoint = 'toptwtr'; }
   if(render_format === 'discussions') { link_endpoint = 'discussions'; }
-  if(render_format === 'topics') { link_endpoint = 'topics'; }
 
   var time_ranges = ['day', '3days', 'week', 'month', 'year', 'alltime'];
   var time_txt = {'day':'Last day', '3days': 'Last 3 days', 'week': 'Last week', 'month': 'Last month', 'year': 'Last year', 'alltime': 'All time'}
   var time_range = tf;
 
   // set up time filtering options
-  if(render_format === 'recommend' || render_format === 'top' || render_format === 'recent' || render_format === 'friends' || render_format === 'topics') {
+  if(render_format === 'recommend' || render_format === 'top' || render_format === 'recent' || render_format === 'friends') {
     // insert version filtering options for these views
     var elt = d3.select('#recommend-time-choice');
     var vflink = vf === 'all' ? '1' : 'all'; // toggle only showing v1 or not
-    if(render_format === 'recent' || render_format === 'topics') {
+    if(render_format === 'recent') {
       var aelt = elt.append('a').attr('href', '/'+link_endpoint+'?'+'&vfilter='+vflink); // leave out timefilter from this page
     } else {
       var aelt = elt.append('a').attr('href', '/'+link_endpoint+'?'+'timefilter='+time_range+'&vfilter='+vflink);
@@ -115,8 +114,9 @@ $(document).ready(function(){
     if(vf === '1') { delt.classed('vchoice-selected', true); }
   }
 
-  // time choices for recommend/top/friends
+  // time choices for recommend/top
   if(render_format === 'recommend' || render_format === 'top' || render_format === 'friends') {
+    // insert time filtering options for these two views
     var elt = d3.select('#recommend-time-choice');
     elt.append('div').classed('fdivider', true).html('|');
     for(var i=0;i<time_ranges.length;i++) {
@@ -154,19 +154,6 @@ $(document).ready(function(){
   if( render_format === 'recommend') { d3.select('#tabrec').classed('tab-selected', true); }
   if( render_format === 'library') { d3.select('#tablib').classed('tab-selected', true); }
 
-  $("#ingest-toggle").on('click', function(e) {
-    e.preventDefault();
-    $("#ingest-form").toggleClass('visible');
-    if($("#ingest-form").hasClass('visible')) {
-      $("#ingest-id").focus();
-    }
-  });
-
-  $("#ingest-form").on('submit', function() {
-    $("#ingest-toggle").prop('disabled', true);
-    $("#ingest-form button[type='submit']").text('Adding...');
-  });
-
   $("#goaway").on('click', function(){
     $("#prompt").slideUp('fast');
     $.post("/goaway", {}).done(function(data){ });
@@ -177,59 +164,52 @@ $(document).ready(function(){
 </head>
 
 <body>
-<a href="https://github.com/karpathy/arxiv-sanity-preserver"><img style="position: absolute; top: 0; right: 0; border: 0;" src="https://camo.githubusercontent.com/38ef81f8aca64bb9a64448d0d70f1308ef5341ab/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f6461726b626c75655f3132313632312e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png"></a>
+<a href="https://github.com/karpathy/arxiv-sanity-preserver"><img style="position: absolute; top: 0; right: 0; border: 0; z-index: 1000;" src="https://camo.githubusercontent.com/38ef81f8aca64bb9a64448d0d70f1308ef5341ab/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f6461726b626c75655f3132313632312e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png"></a>
 
+<!-- HEADER -->
 <div id="titdiv">
-  <div class="header-bar">
-    <!-- Left: title -->
-    <a href="/">
-      <div id="tittxt">
-        <h1>Arxiv Sanity Preserver</h1>
+  <!-- User account information on top right -->
+  <div id="userinfo">
+    {% if not g.user %}
+    <form action="{{ url_for('login') }}" method="post" style="display: flex; align-items: center; gap: 0.5rem;">
+      <span style="margin-right: 0.5rem;">User:</span>
+      <input type="text" name="username" class="input-no-border" placeholder="Username">
+      <span>Pass:</span>
+      <input type="password" name="password" class="input-no-border" placeholder="Password">
+      <input type="submit" value="Login or Create" class="btn-fancy">
+    </form>
+    {% else %}
+    <a href="{{ url_for('account') }}">{{ g.user.username }}</a>
+    <a href="{{ url_for('logout') }}">log out</a>
+    {% endif %}
+  </div>
+
+  <!-- Site information/banner on top left -->
+  <a href="/">
+    <div id="tittxt">
+      <h1>Arxiv Sanity Preserver</h1>
+      <div class="site-subtitle">
         Built in spare time by <a href="https://twitter.com/karpathy">@karpathy</a> to accelerate research.<br>
         Serving last {{ totpapers }} papers from cs.[CV|CL|LG|AI|NE]/stat.ML
       </div>
-    </a>
-
-    <!-- Right: Arxiv Code bar + user info -->
-    <div id="header-actions">
-      <div class="header-actions-top">
-        <div id="ingest-control">
-          <button id="arxiv-code-btn" type="button">Arxiv Code</button>
-          <button id="ingest-toggle" aria-label="Add arXiv paper" title="Add arXiv paper">+</button>
-
-          <form id="ingest-form" method="post" action="{{ url_for('ingest_arxiv') }}">
-            <input
-              id="ingest-id"
-              name="paper_id"
-              type="text"
-              placeholder="arXiv id (e.g., 1512.08756v2)"
-              aria-label="arXiv identifier"
-              required
-            >
-            <button type="submit">Add</button>
-          </form>
-        </div>
-
-        <div id="userinfo">
-          <a href="{{ url_for('account') }}">Single-user: {{ g.user.username }}</a>
-        </div>
-      </div>
     </div>
-  </div>
+  </a>
 </div>
 
+<!-- FLASHES -->
 <div id="flashesdiv">
 {% with flashes = get_flashed_messages() %}
     {% if flashes %}
       <ul class="flashes">
       {% for message in flashes %}
-        <li>{{ message }}
+        <li>{{ message }}</li>
       {% endfor %}
       </ul>
     {% endif %}
 {% endwith %}
 </div>
 
+<!-- BANNER -->
 {% if render_format == "recent" and g.user.username is not defined %}
 <div id="banner">
   <div style="float:right;cursor:pointer;" id="xbanner">X</div>
@@ -237,9 +217,10 @@ $(document).ready(function(){
 </div>
 {% endif %}
 
+<!-- DONATION PROMPT -->
 {% if show_prompt == "yes" %}
-<div id="prompt" style="background-color:#f6ff7a; padding:10px; width:980px; margin-left:auto; margin-right:auto; font-size:14px;">
-Hey there {{ g.user.username }}, sorry to interrupt. Arxiv-sanity costs a non-negligible amount of money to host.
+<div id="prompt" style="background-color:#fef3c7; padding:1rem; max-width:1400px; margin:1rem auto; font-size:14px; border-radius:0.5rem; border:1px solid #f59e0b;">
+Hey there {{ g.user.username }}, sorry to interrupt. Arxiv-sanity costs a non-negligible amount of money to host. 
 If you love the site, please consider pitching in:
   <form action="https://www.paypal.com/cgi-bin/webscr" method="post" target="_top" style="display:inline-block;">
   <input type="hidden" name="cmd" value="_s-xclick">
@@ -251,74 +232,100 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
 </div>
 {% endif %}
 
-<div id="maindiv">
-  <div id="content-grid">
-
-    <!-- Left column: Research Conditions sidebar -->
-    <aside id="search-menu">
-      <div class="search-menu-title">Research Conditions</div>
-      <form action="/search" method="get" id="search-menu-form">
-
-        <label for="qfield">Search Bar</label>
-        <input name="q" type="text" id="qfield" value="{{ search_query }}" placeholder="Find papers or authors">
-
-        <label for="topic-select">Multi-Topics Selection</label>
-        <div class="topic-scroll">
-          <select id="topic-select" name="topics" size="10" multiple>
-            <option value="" {% if not selected_topics %}selected{% endif %}>All topics</option>
-            {% for topic in topics %}
-              <option value="{{ topic.name }}" {% if topic.name in selected_topics %}selected{% endif %}>
-                {{ topic.display_name }} ({{ topic.count }})
-              </option>
-            {% endfor %}
-          </select>
-        </div>
-
-        <label for="min-score">Label Score &gt; X</label>
-        <input name="min_score" id="min-score" type="number" step="0.1" min="0" value="{{ min_score }}" placeholder="e.g., 1.5">
-
-        <!-- keep classification, just as an extra line -->
-        <label for="classification-filter">Classification</label>
-        <select id="classification-filter" name="classification">
-          <option value="all" {% if selected_classification == 'all' %}selected{% endif %}>All classifications</option>
-          <option value="hot" {% if selected_classification == 'hot' %}selected{% endif %}>Hot (score ≥ 2.0)</option>
-          <option value="neutral" {% if selected_classification == 'neutral' %}selected{% endif %}>Neutral (1.0–2.0)</option>
-          <option value="slop" {% if selected_classification == 'slop' %}selected{% endif %}>Slop (score &lt; 1.0)</option>
-        </select>
-
-        <button type="submit" class="primary-btn">Apply filters</button>
-      </form>
-    </aside>
-
-    <!-- Right column: tabs + paper thread -->
-    <section id="results-column">
-      <div class="results-card">
-        <div class="section-heading">Paper Feed</div>
-        <div id="pagebar">
-          <div class="pagelink" id="tabrecent"><a href="/">most recent</a></div>
-          <div class="pagelink" id="tabtop"><a href="/top">top recent</a></div>
-          <div class="pagelink" id="tabtwtr"><a href="/toptwtr">top hype</a></div>
-          <div class="pagelink" id="tabfriends"><a href="/friends">friends</a></div>
-          <div class="pagelink" id="tabdiscussions"><a href="/discussions">discussions</a></div>
-          <div class="pagelink" id="tabrec"><a href="/recommend">recommended</a></div>
-          <div class="pagelink" id="tablib"><a href="/library">library</a></div>
-        </div>
-
-        <div id="recommend-time-choice" class="centerdiv"></div>
-
-        <div id="rtable"></div>
-
-        <div id="loadmore">
-          <button id="loadmorebtn">Load more</button>
-        </div>
-      </div>
-    </section>
-
-  </div>
+<!-- SEARCH BOX -->
+<div id="sbox">
+  <form action="/search" method="get">
+    <input name="q" type="text" id="qfield" placeholder="Search papers...">
+  </form>
+  <div id="search_hint"></div>
 </div>
 
+<!-- PAGE BAR (NAVIGATION TABS) -->
+<div id="pagebar">
+  <div class="pagelink" id="tabrecent"><a href="/">most recent</a></div>
+  <div class="pagelink" id="tabtop"><a href="/top">top recent</a></div>
+  <div class="pagelink" id="tabtwtr"><a href="/toptwtr">top hype</a></div>
+  <div class="pagelink" id="tabfriends"><a href="/friends">friends</a></div>
+  <div class="pagelink" id="tabdiscussions"><a href="/discussions">discussions</a></div>
+  <div class="pagelink" id="tabrec"><a href="/recommend">recommended</a></div>
+  <div class="pagelink" id="tablib"><a href="/library">library</a></div>
+</div>
 
-<br><br><br><br><br><br>
+<!-- TIME FILTERING OPTIONS -->
+<div id="recommend-time-choice" class="centerdiv"></div>
+
+<!-- MAIN LAYOUT: SIDEBAR + CONTENT -->
+<div class="layout-container">
+  
+  <!-- SIDEBAR: FILTERS -->
+  <aside class="filter-panel">
+    <h2>Filters</h2>
+    <form class="filter-form" method="get">
+      
+      <!-- TOPICS (Multi-select tags) -->
+      <div class="filter-group">
+        <label>Topics</label>
+        <div class="tag-list">
+          <label class="tag">
+            <input type="checkbox" name="topics[]" value="cv" />
+            <span>CV</span>
+          </label>
+          <label class="tag">
+            <input type="checkbox" name="topics[]" value="cl" />
+            <span>CL</span>
+          </label>
+          <label class="tag">
+            <input type="checkbox" name="topics[]" value="lg" />
+            <span>LG</span>
+          </label>
+          <label class="tag">
+            <input type="checkbox" name="topics[]" value="ai" />
+            <span>AI</span>
+          </label>
+          <label class="tag">
+            <input type="checkbox" name="topics[]" value="ne" />
+            <span>NE</span>
+          </label>
+          <label class="tag">
+            <input type="checkbox" name="topics[]" value="stat_ml" />
+            <span>stat.ML</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- SCORE FILTER -->
+      <div class="filter-group">
+        <label for="scorebar">Minimum Score</label>
+        <input
+          id="scorebar"
+          name="scorebar"
+          type="text"
+          placeholder="e.g. 2.5"
+          inputmode="decimal"
+          pattern="[0-9]*[.]?[0-9]*"
+        />
+      </div>
+
+      <!-- ACTIONS -->
+      <div class="filter-actions">
+        <button type="submit" class="btn-primary">Apply Filters</button>
+        <button type="reset" class="btn-secondary">Reset</button>
+      </div>
+    </form>
+  </aside>
+
+  <!-- MAIN CONTENT: PAPERS -->
+  <main id="maindiv">
+    <div id="rtable"></div>
+
+    <div id="loadmore">
+      <button id="loadmorebtn">Load more</button>
+    </div>
+  </main>
+
+</div>
+
+<br><br>
 </body>
 
 </html>
