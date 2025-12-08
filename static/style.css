@@ -145,7 +145,7 @@ h1 {
 /* SIDEBAR */
 .filter-panel {
         width: 280px;
-        padding: 1.5rem 1rem;
+        padding: 1.25rem 1rem;
         background: #111827;
         color: #f9fafb;
         display: flex;
@@ -153,7 +153,7 @@ h1 {
         border-right: 1px solid #1f2937;
         position: sticky;
         top: 1rem;
-        height: calc(100vh - 2rem);
+        max-height: calc(100vh - 2rem);
         overflow-y: auto;
 }
 
@@ -337,6 +337,8 @@ h1 {
         border-radius: 0.75rem;
         background: #0b1224;
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+        position: sticky;
+        bottom: 1rem;
 }
 
 .ingest-card h3 {
