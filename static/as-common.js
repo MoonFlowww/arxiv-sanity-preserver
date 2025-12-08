@@ -24,6 +24,35 @@ var QueryString = function () {
     return query_string;
 }();
 
+var layoutSelection = 'double';
+
+function applyLayoutClass(layoutChoice) {
+  var rtable = $('#rtable');
+  layoutSelection = layoutChoice || 'double';
+  rtable.attr('data-layout', layoutSelection);
+  rtable.removeClass('layout-single layout-double').addClass('layout-' + layoutSelection);
+  return layoutSelection;
+}
+
+function initLayoutToggle(buttonSelector) {
+  var layoutButtons = $(buttonSelector);
+  var initialChoice = $('#rtable').data('layout') || layoutSelection;
+
+  function updateToggleState(selection) {
+    layoutButtons.attr('aria-pressed', 'false').removeClass('active');
+    layoutButtons.filter('[data-layout="' + selection + '"]').attr('aria-pressed', 'true').addClass('active');
+  }
+
+  layoutButtons.on('click', function(){
+    var choice = $(this).data('layout');
+    applyLayoutClass(choice);
+    updateToggleState(choice);
+  });
+
+  applyLayoutClass(initialChoice);
+  updateToggleState(initialChoice);
+}
+
 function jq( myid ) { return myid.replace( /(:|\.|\[|\]|,)/g, "\\$1" ); } // for dealing with ids that have . in them
 
 function build_ocoins_str(p) {
@@ -120,8 +149,9 @@ function addPapers(num, dynamic) {
     tdiv.append('span').classed('cs', true).html(build_categories_html(p.tags));
     tdiv.append('br');
     var metaRow = tdiv.append('div').classed('paper-meta', true);
-    var commentText = (p.comment || '').trim();
-    metaRow.append('span').classed('ccs', true).html(commentText);
+
+    metaRow.append('span').classed('ccs', true).html(p.comment);
+
     var metrics = metaRow.append('div').classed('paper-metrics', true);
     if(typeof p.impact_score !== 'undefined') {
       var popularityClass = 'popularity-0';
