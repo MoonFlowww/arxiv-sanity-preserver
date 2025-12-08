@@ -136,10 +136,11 @@ h1 {
 
 /* LAYOUT */
 .layout-container {
-	display: flex;
-	min-height: calc(100vh - 100px);
-	width: 100%;
-	margin: 0 auto;
+        display: flex;
+        min-height: calc(100vh - 100px);
+        width: 100%;
+        margin: 0 auto;
+        align-items: flex-start;
 }
 
 /* SIDEBAR */
@@ -152,9 +153,14 @@ h1 {
         flex-direction: column;
         border-right: 1px solid #1f2937;
         position: sticky;
-        top: 1rem;
-        max-height: calc(100vh - 2rem);
+        top: 0;
+        height: 100vh;
+        max-height: 100vh;
         overflow-y: auto;
+        flex-shrink: 0;
+        align-self: flex-start;
+        z-index: 2;
+        overscroll-behavior: contain;
 }
 
 .filter-panel h2 {
@@ -238,6 +244,7 @@ h1 {
     min-height: 0;
     max-height: 260px;
     overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .tag {
@@ -1157,10 +1164,12 @@ ul.flashes li {
                 width: 100%;
                 border-right: none;
                 border-bottom: 1px solid #1f2937;
-                position: static;
-                top: auto;
+                position: sticky;
+                top: 0;
                 height: auto;
-                overflow: visible;
+                max-height: none;
+                overflow: auto;
+                z-index: 3;
         }
 	
 	#maindiv {
