@@ -55,11 +55,30 @@ def fetch_citation_count(arxiv_id):
   return None
 
 print('decorating the database with additional information...')
+seconds_per_year = 365.25 * 24 * 60 * 60
+
+
+def ensure_time_metadata(paper):
+  if 'time_updated' not in paper:
+    timestruct = dateutil.parser.parse(paper['updated'])
+    paper['time_updated'] = int(timestruct.strftime("%s"))
+
+  if 'time_published' not in paper:
+    timestruct = dateutil.parser.parse(paper['published'])
+    paper['time_published'] = int(timestruct.strftime("%s"))
+
+
+def compute_impact_score(paper, now_ts=None, alpha=0.3):
+  ensure_time_metadata(paper)
+
+  citations = paper.get('citation_count', 0) or 0
+  years_since_pub = max(((now_ts or time.time()) - paper['time_published']) / seconds_per_year, 0)
+  paper['impact_score'] = math.log(1 + citations) - alpha * years_since_pub
+  paper['years_since_pub'] = years_since_pub
+
+
 for pid,p in db.items():
-  timestruct = dateutil.parser.parse(p['updated'])
-  p['time_updated'] = int(timestruct.strftime("%s")) # store in struct for future convenience
-  timestruct = dateutil.parser.parse(p['published'])
-  p['time_published'] = int(timestruct.strftime("%s")) # store in struct for future convenience
+  ensure_time_metadata(p)
 
 print('fetching citation counts from OpenAlex (if missing)...')
 updated_citations = 0
@@ -78,23 +97,9 @@ for pid, p in db.items():
 print('Updated citation counts for %d papers.' % updated_citations)
 
 print('computing OpenAlex-inspired recency-aware scores...')
-alpha = 0.3
-seconds_per_year = 365.25 * 24 * 60 * 60
+now_ts = time.time()
 for pid, p in db.items():
-  citations = p.get('citation_count', 0) or 0
-  years_since_pub = max((time.time() - p['time_published']) / seconds_per_year, 0)
-  score = math.log(1 + citations) - alpha * years_since_pub
-
-  if score >= 2.0:
-    classification = 'hot'
-  elif score >= 1.0:
-    classification = 'neutral'
-  else:
-    classification = 'slop'
-
-  p['impact_score'] = score
-  p['impact_classification'] = classification
-  p['years_since_pub'] = years_since_pub
+  compute_impact_score(p, now_ts=now_ts)
 
 print('computing min/max time for all papers...')
 tts = [time.mktime(dateutil.parser.parse(p['updated']).timetuple()) for pid,p in db.items()]

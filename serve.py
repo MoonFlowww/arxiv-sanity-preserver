@@ -5,6 +5,7 @@ import pickle
 import argparse
 import dateutil.parser
 from random import shuffle, randrange, uniform
+import math
 
 import numpy as np
 from sqlite3 import dbapi2 as sqlite3
@@ -35,6 +36,8 @@ limiter = Limiter(app, global_limits=["100 per hour", "20 per minute"])
 # topic browsing globals
 TOPIC_PIDS = {}
 TOPICS = []
+
+SECONDS_PER_YEAR = 365.25 * 24 * 60 * 60
 
 # mapping of arXiv category identifiers to human-readable labels
 TOPIC_TRANSLATIONS = {
@@ -241,29 +244,62 @@ def _normalize_topics(topic_names):
   return [t for t in topic_names if t]
 
 
-def filter_papers(papers, topic_names=None, classification='all', min_score=None):
+def ensure_time_metadata(paper):
+  if 'time_updated' not in paper:
+    timestruct = dateutil.parser.parse(paper['updated'])
+    paper['time_updated'] = int(timestruct.strftime("%s"))
+
+  if 'time_published' not in paper:
+    timestruct = dateutil.parser.parse(paper['published'])
+    paper['time_published'] = int(timestruct.strftime("%s"))
+
+
+def compute_impact_score(paper, now_ts=None, alpha=0.3):
+  ensure_time_metadata(paper)
+
+  citations = paper.get('citation_count', 0) or 0
+  years_since_pub = max(((now_ts or time.time()) - paper['time_published']) / SECONDS_PER_YEAR, 0)
+  paper['impact_score'] = math.log(1 + citations) - alpha * years_since_pub
+  paper['years_since_pub'] = years_since_pub
+
+
+def ensure_impact_scores(paper_db):
+  now_ts = time.time()
+  for paper in paper_db.values():
+    compute_impact_score(paper, now_ts=now_ts)
+
+
+def sort_by_impact(paper_db):
+  scored_papers = []
+  for pid, paper in paper_db.items():
+    if paper.get('impact_score') is None:
+      continue
+    scored_papers.append((paper['impact_score'], pid))
+
+  scored_papers.sort(reverse=True, key=lambda x: x[0])
+  return [pid for _, pid in scored_papers]
+
+
+def filter_papers(papers, topic_names=None, min_score=None):
   filtered = papers
   normalized_topics = _normalize_topics(topic_names)
 
   if normalized_topics:
     filtered = [p for p in filtered if p.get('arxiv_primary_category', {}).get('term') in normalized_topics]
 
-  if classification and classification != 'all':
-    filtered = [p for p in filtered if p.get('impact_classification') == classification]
-
   if min_score is not None:
-    filtered = [p for p in filtered if p.get('impact_score', 0) >= min_score]
+    filtered = [p for p in filtered if p.get('impact_score') is not None and p['impact_score'] >= min_score]
 
   return filtered
 
 
-def papers_search(qraw, topic_names=None, classification='all', min_score=None):
+def papers_search(qraw, topic_names=None, min_score=None):
   qparts = qraw.lower().strip().split() if qraw else []
   scores = []
 
   if not qparts:
     base = [db[pid] for pid in DATE_SORTED_PIDS]
-    return filter_papers(base, topic_names=topic_names, classification=classification, min_score=min_score)
+    return filter_papers(base, topic_names=topic_names, min_score=min_score)
 
   # use reverse index and accumulate scores
   for pid, p in db.items():
@@ -275,7 +311,7 @@ def papers_search(qraw, topic_names=None, classification='all', min_score=None):
     scores.append((score, p))
   scores.sort(reverse=True, key=lambda x: x[0]) # descending
   out = [x[1] for x in scores if x[0] > 0]
-  return filter_papers(out, topic_names=topic_names, classification=classification, min_score=min_score)
+  return filter_papers(out, topic_names=topic_names, min_score=min_score)
 
 def papers_similar(pid):
   rawpid = strip_version(pid)
@@ -374,8 +410,7 @@ def encode_json(ps, n=10, send_images=True, send_abstracts=True):
     struct['link'] = p['link']
     struct['in_library'] = 1 if p['_rawid'] in libids else 0
     struct['citation_count'] = p.get('citation_count', 0)
-    struct['impact_score'] = p.get('impact_score', 0)
-    struct['impact_classification'] = p.get('impact_classification', 'slop')
+    struct['impact_score'] = p.get('impact_score')
     if send_abstracts:
       struct['abstract'] = p['summary']
     if send_images:
@@ -438,7 +473,6 @@ def default_context(papers, **kws):
     selected_topic='',
     selected_topic_display='',
     selected_topics=[],
-    selected_classification=kws.get('selected_classification', 'all'),
     min_score=kws.get('min_score', ''),
     search_query=kws.get('search_query', ''),
   )
@@ -614,7 +648,6 @@ def search():
   legacy_topic = request.args.get('topic', '')
   if legacy_topic and legacy_topic not in selected_topics:
     selected_topics.append(legacy_topic)
-  classification = request.args.get('classification', 'all')
   min_score_str = request.args.get('min_score', '')
 
   try:
@@ -622,14 +655,13 @@ def search():
   except ValueError:
     min_score = None
 
-  papers = papers_search(q, topic_names=selected_topics, classification=classification, min_score=min_score)
+  papers = papers_search(q, topic_names=selected_topics, min_score=min_score)
   ctx = default_context(
     papers,
     render_format="search",
     selected_topic=legacy_topic,
     selected_topic_display=translate_topic_name(legacy_topic) if legacy_topic else '',
     selected_topics=selected_topics,
-    selected_classification=classification,
     min_score=min_score_str,
     search_query=q,
   )
@@ -910,6 +942,8 @@ if __name__ == "__main__":
 
   print('loading the paper database', Config.db_serve_path)
   db = pickle.load(open(Config.db_serve_path, 'rb'))
+
+  ensure_impact_scores(db)
   
   print('loading tfidf_meta', Config.meta_path)
   meta = pickle.load(open(Config.meta_path, "rb"))
@@ -927,7 +961,7 @@ if __name__ == "__main__":
   print('loading serve cache...', Config.serve_cache_path)
   cache = pickle.load(open(Config.serve_cache_path, "rb"))
   DATE_SORTED_PIDS = cache['date_sorted_pids']
-  TOP_SORTED_PIDS = cache['top_sorted_pids']
+  TOP_SORTED_PIDS = sort_by_impact(db)
   SEARCH_DICT = cache['search_dict']
 
   print('building topic index')

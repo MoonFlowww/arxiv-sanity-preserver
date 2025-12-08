@@ -154,16 +154,17 @@ function addPapers(num, dynamic) {
     metaRow.append('span').classed('ccs', true).html(p.comment);
 
     var metrics = metaRow.append('div').classed('paper-metrics', true);
-    if(typeof p.impact_score !== 'undefined') {
+    var impactScore = Number(p.impact_score);
+    if(Number.isFinite(impactScore)) {
       var popularityClass = 'popularity-0';
-      if(p.impact_score >= 3) {
+      if(impactScore >= 3) {
         popularityClass = 'popularity-3';
-      } else if(p.impact_score >= 2) {
+      } else if(impactScore >= 2) {
         popularityClass = 'popularity-2';
-      } else if(p.impact_score >= 1) {
+      } else if(impactScore >= 1) {
         popularityClass = 'popularity-1';
       }
-      metrics.append('span').classed('news-popularity ' + popularityClass, true).html('Score: ' + p.impact_score.toFixed(2));
+      metrics.append('span').classed('news-popularity ' + popularityClass, true).html('Score: ' + impactScore.toFixed(2));
     }
     if(typeof p.citation_count !== 'undefined') {
       metrics.append('span').classed('cit', true).html('Citations: ' + p.citation_count);
