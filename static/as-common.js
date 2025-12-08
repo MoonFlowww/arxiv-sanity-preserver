@@ -149,7 +149,9 @@ function addPapers(num, dynamic) {
     tdiv.append('span').classed('cs', true).html(build_categories_html(p.tags));
     tdiv.append('br');
     var metaRow = tdiv.append('div').classed('paper-meta', true);
+
     metaRow.append('span').classed('ccs', true).html(p.comment);
+
     var metrics = metaRow.append('div').classed('paper-metrics', true);
     if(typeof p.impact_score !== 'undefined') {
       var popularityClass = 'popularity-0';
