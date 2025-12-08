@@ -28,6 +28,7 @@ var layoutSelection = 'double';
 
 function applyLayoutClass(layoutChoice) {
   var rtable = $('#rtable');
+
   layoutSelection = layoutChoice || 'double';
   rtable.attr('data-layout', layoutSelection);
   rtable.removeClass('layout-single layout-double').addClass('layout-' + layoutSelection);

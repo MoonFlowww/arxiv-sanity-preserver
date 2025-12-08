@@ -1035,6 +1035,8 @@ ul.flashes li {
                 grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
         }
 
+ble[data-layout="double"] {
+
         #rtable.layout-single {
                 grid-template-columns: 1fr;
         }
