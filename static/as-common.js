@@ -24,6 +24,41 @@ var QueryString = function () {
     return query_string;
 }();
 
+var layoutSelection = 'double';
+
+function applyLayoutClass(layoutChoice) {
+  var rtable = $('#rtable');
+  if(!rtable.length) { return layoutSelection; }
+  layoutSelection = layoutChoice || 'double';
+  rtable.attr('data-layout', layoutSelection);
+  rtable.removeClass('layout-single layout-double').addClass('layout-' + layoutSelection);
+  if(layoutSelection === 'single') {
+    rtable.css('grid-template-columns', '1fr');
+  } else {
+    rtable.css('grid-template-columns', '');
+  }
+  return layoutSelection;
+}
+
+function initLayoutToggle(buttonSelector) {
+  var layoutButtons = $(buttonSelector);
+  var initialChoice = $('#rtable').data('layout') || layoutSelection;
+
+  function updateToggleState(selection) {
+    layoutButtons.attr('aria-pressed', 'false').removeClass('active');
+    layoutButtons.filter('[data-layout="' + selection + '"]').attr('aria-pressed', 'true').addClass('active');
+  }
+
+  layoutButtons.on('click', function(){
+    var choice = $(this).data('layout');
+    applyLayoutClass(choice);
+    updateToggleState(choice);
+  });
+
+  applyLayoutClass(initialChoice);
+  updateToggleState(initialChoice);
+}
+
 function jq( myid ) { return myid.replace( /(:|\.|\[|\]|,)/g, "\\$1" ); } // for dealing with ids that have . in them
 
 function build_ocoins_str(p) {
