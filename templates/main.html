@@ -188,36 +188,38 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
 	  {% set selected_sorted = sorted_topics|selectattr('name', 'in', selected_topics)|list %}
       {% set unselected_sorted = sorted_topics|rejectattr('name', 'in', selected_topics)|list %}
       {% set display_topics = selected_sorted + unselected_sorted %}
-	  {% set max_label_length = 18 %}
+          {% set max_label_length = 18 %}
       <div class="filter-group">
         <label>Topics</label>
-        <input
-          type="search"
-          id="topic-search"
-          class="topic-search"
-          placeholder="Search topics..."
-          autocomplete="off"
-        />
-        <div class="tag-list limited" id="topic-tags">
-          {% for topic in display_topics %}
-		   {% set full_name = topic.display_name %}
-            {% if full_name|length > max_label_length %}
-              {% set truncated_candidate = full_name[:max_label_length] %}
-              {% set trimmed = truncated_candidate.rsplit(' ', 1)[0] %}
-              {% set truncated_name = (trimmed if trimmed else truncated_candidate).rstrip() ~ '...' %}
-            {% else %}
-              {% set truncated_name = full_name %}
-            {% endif %}
-            <label class="tag">
-              <input
-                type="checkbox"
-                name="topics[]"
-                value="{{ topic.name }}"
-                {% if topic.name in selected_topics %}checked{% endif %}
-              />
-              <span data-full-name="{{ full_name }}" title="{{ full_name }}">{{ truncated_name }} ({{ topic.count }})</span>
-            </label>
-          {% endfor %}
+        <div class="topic-cluster">
+          <input
+            type="search"
+            id="topic-search"
+            class="topic-search"
+            placeholder="Search topics..."
+            autocomplete="off"
+          />
+          <div class="tag-list limited" id="topic-tags">
+            {% for topic in display_topics %}
+                     {% set full_name = topic.display_name %}
+              {% if full_name|length > max_label_length %}
+                {% set truncated_candidate = full_name[:max_label_length] %}
+                {% set trimmed = truncated_candidate.rsplit(' ', 1)[0] %}
+                {% set truncated_name = (trimmed if trimmed else truncated_candidate).rstrip() ~ '...' %}
+              {% else %}
+                {% set truncated_name = full_name %}
+              {% endif %}
+              <label class="tag">
+                <input
+                  type="checkbox"
+                  name="topics[]"
+                  value="{{ topic.name }}"
+                  {% if topic.name in selected_topics %}checked{% endif %}
+                />
+                <span data-full-name="{{ full_name }}" title="{{ full_name }}">{{ truncated_name }} ({{ topic.count }})</span>
+              </label>
+            {% endfor %}
+          </div>
         </div>
       </div>
 
@@ -238,7 +240,20 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
       <div class="sort-options">
        <div class="sort-row">
           <div class="filter-group sort-control">
-            <label for="sortby">Sort By</label>
+            <div class="sort-header">
+              <label for="sortby">Sort By</label>
+              {% set sort_order = request.args.get('sortorder', 'desc') %}
+              <div class="order-toggle" id="sortorder">
+                <label class="order-option">
+                  <input type="radio" name="sortorder" value="desc" {% if sort_order == 'desc' %}checked{% endif %}>
+                  <span class="order-button order-desc">▼ DESC</span>
+                </label>
+                <label class="order-option">
+                  <input type="radio" name="sortorder" value="asc" {% if sort_order == 'asc' %}checked{% endif %}>
+                  <span class="order-button order-asc">▲ ASC</span>
+                </label>
+              </div>
+            </div>
             <div class="select-wrapper">
               {% set sort_by = request.args.get('sortby', 'date') %}
               <select id="sortby" name="sortby" class="select-input">
@@ -246,21 +261,6 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
                 <option value="score" {% if sort_by == 'score' %}selected{% endif %}>Score</option>
                 <option value="citation" {% if sort_by == 'citation' %}selected{% endif %}>Citation</option>
               </select>
-            </div>
-          </div>
-
-          <div class="filter-group order-control">
-            <label for="sortorder">Order</label>
-            {% set sort_order = request.args.get('sortorder', 'desc') %}
-            <div class="order-toggle" id="sortorder">
-              <label class="order-option">
-                <input type="radio" name="sortorder" value="desc" {% if sort_order == 'desc' %}checked{% endif %}>
-                <span class="order-button">⬇ Desc</span>
-              </label>
-              <label class="order-option">
-                <input type="radio" name="sortorder" value="asc" {% if sort_order == 'asc' %}checked{% endif %}>
-                <span class="order-button">⬆ Asc</span>
-              </label>
             </div>
           </div>
         </div>
