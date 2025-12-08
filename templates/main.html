@@ -96,18 +96,23 @@ $(document).ready(function(){
     $.post("/goaway", {}).done(function(data){ });
   });
 
-  var topicTags = $("#topic-tags");
-  var topicToggle = $("#topics-toggle");
+  var topicSearch = $("#topic-search");
 
-  if(topicTags.length && topicToggle.length) {
-    topicToggle.on('click', function(){
-      var expanded = topicTags.hasClass('expanded');
-      if(expanded) {
-        topicTags.removeClass('expanded').addClass('collapsed');
-        topicToggle.text('Show all topics');
+  if(topicTags.length && topicSearch.length) {
+    var tags = topicTags.find('.tag');
+
+    topicSearch.on('input', function(){
+      var query = $(this).val().toLowerCase().trim();
+
+      if(query === '') {
+        tags.show();
+        topicTags.addClass('limited');
       } else {
-        topicTags.removeClass('collapsed').addClass('expanded');
-        topicToggle.text('Show fewer topics');
+        tags.each(function(){
+          var text = $(this).text().toLowerCase();
+          $(this).toggle(text.indexOf(query) !== -1);
+        });
+        topicTags.removeClass('limited');
       }
     });
   }
@@ -175,14 +180,23 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
       </div>
 
       <!-- TOPICS (Multi-select tags) -->
-	  {% set max_visible_topics = 6 %}
+
       {% set sorted_topics = topics|sort(attribute='count', reverse=True) %}
+	  {% set selected_sorted = sorted_topics|selectattr('name', 'in', selected_topics)|list %}
+      {% set unselected_sorted = sorted_topics|rejectattr('name', 'in', selected_topics)|list %}
+      {% set display_topics = selected_sorted + unselected_sorted %}
       <div class="filter-group">
         <label>Topics</label>
-          <div class="tag-list collapsed" id="topic-tags">
-          {% for topic in sorted_topics %}
-            {% set is_extra = (loop.index > max_visible_topics) and (topic.name not in selected_topics) %}
-            <label class="tag {% if is_extra %}tag-extra{% endif %}">
+        <input
+          type="search"
+          id="topic-search"
+          class="topic-search"
+          placeholder="Search topics..."
+          autocomplete="off"
+        />
+        <div class="tag-list limited" id="topic-tags">
+          {% for topic in display_topics %}
+            <label class="tag">
               <input
                 type="checkbox"
                 name="topics[]"
@@ -193,9 +207,6 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
             </label>
           {% endfor %}
         </div>
-		{% if topics|length > max_visible_topics %}
-        <button type="button" class="tag-toggle" id="topics-toggle">Show all topics</button>
-        {% endif %}
       </div>
 
       <!-- SCORE FILTER -->
