@@ -245,11 +245,11 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
               {% set sort_order = request.args.get('sortorder', 'desc') %}
               <div class="order-toggle" id="sortorder">
                 <label class="order-option">
-                  <input type="checkbox" name="sortorder" value="desc" {% if sort_order == 'desc' %}checked{% endif %}>
+                  <input type="radio" name="sortorder" value="desc" {% if sort_order == 'desc' %}checked{% endif %}>
                   <span class="order-button order-desc">DESC</span>
                 </label>
                 <label class="order-option">
-                  <input type="checkbox" name="sortorder" value="asc" {% if sort_order == 'asc' %}checked{% endif %}>
+                  <input type="radio" name="sortorder" value="asc" {% if sort_order == 'asc' %}checked{% endif %}>
                   <span class="order-button order-asc">ASC</span>
                 </label>
               </div>
