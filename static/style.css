@@ -209,9 +209,9 @@ h1 {
 	gap: 0.35rem;
 }
 .tag-list.limited {
-        max-height: 9.5rem;
-        overflow: hidden;
-        position: relative;
+	max-height: 10.5rem;
+	overflow-y: auto;
+	padding-right: 0.35rem;
 }
 
 .tag {
