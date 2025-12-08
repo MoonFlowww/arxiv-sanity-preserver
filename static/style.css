@@ -655,7 +655,67 @@ h1 {
 }
 
 .paperdesc {
-	width: 100%;
+        width: 100%;
+}
+
+.paper-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin: 0.35rem 0;
+}
+
+.paper-meta .ccs {
+        flex: 1;
+        font-size: 13px;
+        color: #111827;
+}
+
+.paper-metrics {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-shrink: 0;
+}
+
+.cit {
+        color: #4b5563;
+        font-size: 12px;
+}
+
+/* Base style of the score pill */
+.news-popularity {
+        padding: 0.15rem 0.55rem;
+        border-radius: 999px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        border: 1px solid transparent;
+}
+
+/* Gradient color depending on score */
+.popularity-0 {
+        background: linear-gradient(90deg, #f9fafb, #e5e7eb);
+        color: #4b5563;
+        border-color: #e5e7eb;
+}
+
+.popularity-1 {
+        background: linear-gradient(90deg, #e5e7eb, #bfdbfe);
+        color: #1d4ed8;
+        border-color: #bfdbfe;
+}
+
+.popularity-2 {
+        background: linear-gradient(90deg, #bfdbfe, #60a5fa);
+        color: #0f172a;
+        border-color: #60a5fa;
+}
+
+.popularity-3 {
+        background: linear-gradient(90deg, #60a5fa, #1d4ed8);
+        color: #f9fafb;
+        border-color: #1d4ed8;
 }
 
 .dllinks {

@@ -148,16 +148,25 @@ function addPapers(num, dynamic) {
     }
     tdiv.append('span').classed('cs', true).html(build_categories_html(p.tags));
     tdiv.append('br');
-    tdiv.append('span').classed('ccs', true).html(p.comment);
-    var impactRow = tdiv.append('div').classed('impact-row', true);
+    var metaRow = tdiv.append('div').classed('paper-meta', true);
+    metaRow.append('span').classed('ccs', true).html(p.comment);
+    var metrics = metaRow.append('div').classed('paper-metrics', true);
     if(typeof p.impact_score !== 'undefined') {
-      var classLabel = (p.impact_classification || 'slop');
-      var labelPretty = classLabel.charAt(0).toUpperCase() + classLabel.slice(1);
-      impactRow.append('span').classed('impact-score', true).html('Score: ' + p.impact_score.toFixed(2));
-      impactRow.append('span').classed('impact-chip ' + classLabel, true).html(labelPretty);
+      var popularityClass = 'popularity-0';
+      if(p.impact_score >= 3) {
+        popularityClass = 'popularity-3';
+      } else if(p.impact_score >= 2) {
+        popularityClass = 'popularity-2';
+      } else if(p.impact_score >= 1) {
+        popularityClass = 'popularity-1';
+      }
+      metrics.append('span').classed('news-popularity ' + popularityClass, true).html('Score: ' + p.impact_score.toFixed(2));
     }
     if(typeof p.citation_count !== 'undefined') {
-      impactRow.append('span').classed('cit', true).html('Citations: ' + p.citation_count);
+      metrics.append('span').classed('cit', true).html('Citations: ' + p.citation_count);
+    }
+    if(metrics.node().childElementCount === 0) {
+      metrics.remove();
     }
 
     // action items for each paper
