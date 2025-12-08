@@ -152,7 +152,7 @@ $(document).ready(function(){
           var text = $(this).text().toLowerCase();
           $(this).toggle(text.indexOf(query) !== -1);
         });
-        topicTags.removeClass('limited');
+        topicTags.addClass('limited');
       }
     });
   }

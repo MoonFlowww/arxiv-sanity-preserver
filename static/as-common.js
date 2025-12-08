@@ -28,8 +28,11 @@ var layoutSelection = 'double';
 
 function applyLayoutClass(layoutChoice) {
   var rtable = $('#rtable');
+  if(!rtable.length) { return layoutSelection; }
 
-  layoutSelection = layoutChoice || 'double';
+  var choice = layoutChoice === 'single' ? 'single' : 'double';
+  layoutSelection = choice;
+
   rtable.attr('data-layout', layoutSelection);
   rtable.removeClass('layout-single layout-double').addClass('layout-' + layoutSelection);
   return layoutSelection;
@@ -37,21 +40,34 @@ function applyLayoutClass(layoutChoice) {
 
 function initLayoutToggle(buttonSelector) {
   var layoutButtons = $(buttonSelector);
-  var initialChoice = $('#rtable').data('layout') || layoutSelection;
+  var rtable = $('#rtable');
+  if(!layoutButtons.length || !rtable.length) { return; }
+
+  var savedLayout = null;
+  var canPersistLayout = false;
+  try {
+    canPersistLayout = typeof window !== 'undefined' && 'localStorage' in window;
+    savedLayout = canPersistLayout ? localStorage.getItem('preferredLayout') : null;
+  } catch (e) {}
+
+  var initialChoice = savedLayout || rtable.data('layout') || layoutSelection;
 
   function updateToggleState(selection) {
     layoutButtons.attr('aria-pressed', 'false').removeClass('active');
     layoutButtons.filter('[data-layout="' + selection + '"]').attr('aria-pressed', 'true').addClass('active');
   }
 
-  layoutButtons.on('click', function(){
-    var choice = $(this).data('layout');
-    applyLayoutClass(choice);
-    updateToggleState(choice);
-  });
+    layoutButtons.on('click', function(){
+      var choice = $(this).data('layout');
+      var appliedChoice = applyLayoutClass(choice);
+      if(canPersistLayout) {
+        localStorage.setItem('preferredLayout', appliedChoice);
+      }
+      updateToggleState(appliedChoice);
+    });
 
-  applyLayoutClass(initialChoice);
-  updateToggleState(initialChoice);
+  var appliedInitial = applyLayoutClass(initialChoice);
+  updateToggleState(appliedInitial);
 }
 
 function jq( myid ) { return myid.replace( /(:|\.|\[|\]|,)/g, "\\$1" ); } // for dealing with ids that have . in them
@@ -151,23 +167,28 @@ function addPapers(num, dynamic) {
     tdiv.append('br');
     var metaRow = tdiv.append('div').classed('paper-meta', true);
 
-    metaRow.append('span').classed('ccs', true).html(p.comment);
+    var hasComment = typeof p.comment === 'string' && p.comment.trim() !== '';
+    if(hasComment) {
+      metaRow.append('span').classed('ccs', true).text(p.comment);
+    }
 
     var metrics = metaRow.append('div').classed('paper-metrics', true);
     var impactScore = Number(p.impact_score);
     if(Number.isFinite(impactScore)) {
+      var normalizedScore = Math.abs(impactScore) < 0.005 ? 0 : impactScore;
       var popularityClass = 'popularity-0';
-      if(impactScore >= 3) {
+      if(normalizedScore >= 3) {
         popularityClass = 'popularity-3';
-      } else if(impactScore >= 2) {
+      } else if(normalizedScore >= 2) {
         popularityClass = 'popularity-2';
-      } else if(impactScore >= 1) {
+      } else if(normalizedScore >= 1) {
         popularityClass = 'popularity-1';
       }
-      metrics.append('span').classed('paper-popularity ' + popularityClass, true).html('Score: ' + impactScore.toFixed(2));
+      var formattedScore = normalizedScore.toFixed(2);
+      metrics.append('span').classed('paper-popularity ' + popularityClass, true).text('Score: ' + formattedScore);
     }
     if(typeof p.citation_count !== 'undefined') {
-      metrics.append('span').classed('cit', true).html('Citations: ' + p.citation_count);
+      metrics.append('span').classed('cit', true).text('Citations: ' + p.citation_count);
     }
     if(metrics.node().childElementCount === 0) {
       metrics.remove();
