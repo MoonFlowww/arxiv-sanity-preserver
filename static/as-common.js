@@ -164,7 +164,7 @@ function addPapers(num, dynamic) {
       } else if(impactScore >= 1) {
         popularityClass = 'popularity-1';
       }
-      metrics.append('span').classed('news-popularity ' + popularityClass, true).html('Score: ' + impactScore.toFixed(2));
+      metrics.append('span').classed('paper-popularity ' + popularityClass, true).html('Score: ' + impactScore.toFixed(2));
     }
     if(typeof p.citation_count !== 'undefined') {
       metrics.append('span').classed('cit', true).html('Citations: ' + p.citation_count);
