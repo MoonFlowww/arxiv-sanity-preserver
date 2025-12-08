@@ -309,19 +309,30 @@ h1 {
 	gap: 0.5rem;
 }
 .sort-row {
-	display: flex;
-	gap: 0.75rem;
-	align-items: flex-end;
-	flex-wrap: wrap;
+        display: flex;
+        gap: 0.75rem;
+        align-items: flex-start;
+        flex-wrap: wrap;
 }
 
 .sort-control, .order-control {
-	flex: 1;
-	min-width: 0;
+        flex: 1;
+        min-width: 0;
+}
+
+.sort-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+}
+
+.sort-header label {
+        margin-bottom: 0;
 }
 
 .select-wrapper {
-	position: relative;
+        position: relative;
 }
 
 .select-input {
@@ -343,9 +354,9 @@ h1 {
 }
 
 .order-toggle {
-	display: inline-flex;
-	gap: 0.5rem;
-	align-items: center;
+        display: inline-flex;
+        gap: 0.4rem;
+        align-items: center;
 }
 
 .order-option input[type="radio"] {
@@ -355,33 +366,41 @@ h1 {
 }
 
 .order-option {
-	position: relative;
-	display: inline-flex;
+        position: relative;
+        display: inline-flex;
 }
 
 .order-button {
-	padding: 0.5rem 0.9rem;
-	border-radius: 0.5rem;
-	border: 1px solid #374151;
-	background: #1f2937;
-	color: #e5e7eb;
-	cursor: pointer;
-	font-size: 0.9rem;
-	display: inline-flex;
-	gap: 0.35rem;
-	align-items: center;
-	transition: all 0.2s ease;
-}
-
-.order-option input[type="radio"]:checked + .order-button {
-	background: #2563eb;
-	border-color: #2563eb;
-	color: #ffffff;
-	box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
+        padding: 0.4rem 0.85rem;
+        border-radius: 999px;
+        border: 1px solid #4b5563;
+        background: transparent;
+        color: #e5e7eb;
+        cursor: pointer;
+        font-size: 0.9rem;
+        display: inline-flex;
+        gap: 0.35rem;
+        align-items: center;
+        transition: all 0.2s ease;
 }
 
 .order-button:hover {
-	border-color: #4b5563;
+        border-color: #9ca3af;
+        color: #f9fafb;
+}
+
+.order-option input[type="radio"]:checked + .order-button.order-asc {
+        background: #16a34a;
+        border-color: #16a34a;
+        color: #ffffff;
+        box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
+}
+
+.order-option input[type="radio"]:checked + .order-button.order-desc {
+        background: #b91c1c;
+        border-color: #b91c1c;
+        color: #ffffff;
+        box-shadow: 0 0 0 2px rgba(185, 28, 28, 0.2);
 }
 
 .filter-actions button {

@@ -236,7 +236,20 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
       <div class="sort-options">
        <div class="sort-row">
           <div class="filter-group sort-control">
-            <label for="sortby">Sort By</label>
+            <div class="sort-header">
+              <label for="sortby">Sort By</label>
+              {% set sort_order = request.args.get('sortorder', 'desc') %}
+              <div class="order-toggle" id="sortorder">
+                <label class="order-option">
+                  <input type="radio" name="sortorder" value="desc" {% if sort_order == 'desc' %}checked{% endif %}>
+                  <span class="order-button order-desc">▼ DESC</span>
+                </label>
+                <label class="order-option">
+                  <input type="radio" name="sortorder" value="asc" {% if sort_order == 'asc' %}checked{% endif %}>
+                  <span class="order-button order-asc">▲ ASC</span>
+                </label>
+              </div>
+            </div>
             <div class="select-wrapper">
               {% set sort_by = request.args.get('sortby', 'date') %}
               <select id="sortby" name="sortby" class="select-input">
@@ -244,21 +257,6 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
                 <option value="score" {% if sort_by == 'score' %}selected{% endif %}>Score</option>
                 <option value="citation" {% if sort_by == 'citation' %}selected{% endif %}>Citation</option>
               </select>
-            </div>
-          </div>
-
-          <div class="filter-group order-control">
-            <label for="sortorder">Order</label>
-            {% set sort_order = request.args.get('sortorder', 'desc') %}
-            <div class="order-toggle" id="sortorder">
-              <label class="order-option">
-                <input type="radio" name="sortorder" value="desc" {% if sort_order == 'desc' %}checked{% endif %}>
-                <span class="order-button">⬇ Desc</span>
-              </label>
-              <label class="order-option">
-                <input type="radio" name="sortorder" value="asc" {% if sort_order == 'asc' %}checked{% endif %}>
-                <span class="order-button">⬆ Asc</span>
-              </label>
             </div>
           </div>
         </div>
