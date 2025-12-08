@@ -117,6 +117,8 @@ $(document).ready(function(){
       }
     });
   }
+
+  initLayoutToggle('.layout-btn');
 });
 
 </script>
@@ -274,7 +276,31 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
 
   <!-- MAIN CONTENT: PAPERS -->
   <main id="maindiv">
-    <div id="rtable"></div>
+    <div class="layout-toolbar">
+      <span class="layout-label">Layout</span>
+      <div class="layout-toggle" role="group" aria-label="Toggle paper layout">
+        <button
+          type="button"
+          class="layout-btn"
+          data-layout="single"
+          aria-label="Single column layout"
+          title="Single column layout"
+        >
+          ▢
+        </button>
+        <button
+          type="button"
+          class="layout-btn"
+          data-layout="double"
+          aria-label="Two-column layout"
+          title="Two-column layout"
+        >
+          ▦
+        </button>
+      </div>
+    </div>
+
+    <div id="rtable" data-layout="double"></div>
 
     <div id="loadmore">
       <button id="loadmorebtn">Load more</button>
