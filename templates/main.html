@@ -97,6 +97,7 @@ $(document).ready(function(){
   });
 
   var topicSearch = $("#topic-search");
+  var topicTags = $("#topic-tags");
 
   if(topicTags.length && topicSearch.length) {
     var tags = topicTags.find('.tag');
@@ -212,7 +213,7 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
                 value="{{ topic.name }}"
                 {% if topic.name in selected_topics %}checked{% endif %}
               />
-              <span>{{ truncated_name }} ({{ topic.count }})</span>
+              <span data-full-name="{{ full_name }}" title="{{ full_name }}">{{ truncated_name }} ({{ topic.count }})</span>
             </label>
           {% endfor %}
         </div>
