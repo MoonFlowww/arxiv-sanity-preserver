@@ -188,6 +188,15 @@ h1 {
 	font-size: 0.9rem;
 }
 
+.topic-search {
+        margin-bottom: 0.5rem;
+        background: #0f172a;
+        border-style: dashed;
+        border-color: #1f2937;
+        color: #cbd5e1;
+}
+
+
 .filter-panel input:focus {
 	outline: 2px solid #2563eb;
 	outline-offset: 0;
@@ -198,6 +207,11 @@ h1 {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 0.35rem;
+}
+.tag-list.limited {
+        max-height: 9.5rem;
+        overflow: hidden;
+        position: relative;
 }
 
 .tag {
@@ -499,16 +513,23 @@ h1 {
 	background-color: #f9fafb;
 	overflow-y: auto;
 }
+#rtable {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+        align-items: start;
+}
 
 /* PAPER CARDS */
 .apaper {
 	background: #ffffff;
 	border-radius: 0.75rem;
 	padding: 1.25rem;
-	margin-bottom: 1rem;
 	box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
 	border: 1px solid #e5e7eb;
 	transition: box-shadow 0.2s;
+	display: flex;
+	flex-direction: column;
 }
 
 .apaper:hover {
@@ -545,7 +566,9 @@ h1 {
 	margin-bottom: 1rem;
 	border-left: 4px solid #2563eb;
 }
-
+#rtable .msg {
+        grid-column: 1 / -1;
+}
 .paperdivider {
 	background-color: #e0e7ff;
 	padding: 0.75rem 1rem;
@@ -839,6 +862,10 @@ ul.flashes li {
 	.layout-container {
 		flex-direction: column;
 	}
+
+	#rtable {
+		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+	}
 	
 	.filter-panel {
 		width: 100%;
@@ -866,6 +893,9 @@ ul.flashes li {
 		padding: 0.75rem;
 	}
 	
+	#rtable {
+		grid-template-columns: 1fr;
+	}
 	.apaper {
 		padding: 1rem;
 	}
