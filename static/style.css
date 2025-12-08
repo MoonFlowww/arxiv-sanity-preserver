@@ -234,11 +234,111 @@ h1 {
 	border-color: #4b5563;
 }
 
+.tag-list.collapsed .tag.tag-extra {
+	display: none;
+}
+
+.tag-list.expanded .tag.tag-extra {
+	display: inline-flex;
+}
+
+.tag-toggle {
+	margin-top: 0.35rem;
+	background: transparent;
+	border: 1px dashed #4b5563;
+	color: #e5e7eb;
+	padding: 0.3rem 0.75rem;
+	border-radius: 999px;
+	cursor: pointer;
+	font-size: 0.8rem;
+	transition: all 0.2s ease;
+}
+
+.tag-toggle:hover {
+	border-color: #9ca3af;
+	color: #f9fafb;
+}
+
 /* FILTER ACTIONS */
 .filter-actions {
 	margin-top: 0.5rem;
 	display: flex;
 	gap: 0.5rem;
+}
+.sort-row {
+	display: flex;
+	gap: 0.75rem;
+	align-items: flex-end;
+	flex-wrap: wrap;
+}
+
+.sort-control, .order-control {
+	flex: 1;
+	min-width: 0;
+}
+
+.select-wrapper {
+	position: relative;
+}
+
+.select-input {
+	width: 100%;
+	padding: 0.55rem 0.75rem;
+	border-radius: 0.4rem;
+	border: 1px solid #374151;
+	background: #1f2937;
+	color: #f9fafb;
+	font-size: 0.9rem;
+	appearance: none;
+	-moz-appearance: none;
+	-webkit-appearance: none;
+	background-image: linear-gradient(45deg, transparent 50%, #9ca3af 50%),
+					  linear-gradient(135deg, #9ca3af 50%, transparent 50%);
+	background-position: calc(100% - 16px) calc(50% - 4px), calc(100% - 11px) calc(50% - 4px);
+	background-repeat: no-repeat;
+	background-size: 6px 6px, 6px 6px;
+}
+
+.order-toggle {
+	display: inline-flex;
+	gap: 0.5rem;
+	align-items: center;
+}
+
+.order-option input[type="radio"] {
+	position: absolute;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.order-option {
+	position: relative;
+	display: inline-flex;
+}
+
+.order-button {
+	padding: 0.5rem 0.9rem;
+	border-radius: 0.5rem;
+	border: 1px solid #374151;
+	background: #1f2937;
+	color: #e5e7eb;
+	cursor: pointer;
+	font-size: 0.9rem;
+	display: inline-flex;
+	gap: 0.35rem;
+	align-items: center;
+	transition: all 0.2s ease;
+}
+
+.order-option input[type="radio"]:checked + .order-button {
+	background: #2563eb;
+	border-color: #2563eb;
+	color: #ffffff;
+	box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
+}
+
+.order-button:hover {
+	border-color: #4b5563;
 }
 
 .filter-actions button {
