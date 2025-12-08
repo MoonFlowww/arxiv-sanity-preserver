@@ -95,6 +95,22 @@ $(document).ready(function(){
     $("#prompt").slideUp('fast');
     $.post("/goaway", {}).done(function(data){ });
   });
+
+  var topicTags = $("#topic-tags");
+  var topicToggle = $("#topics-toggle");
+
+  if(topicTags.length && topicToggle.length) {
+    topicToggle.on('click', function(){
+      var expanded = topicTags.hasClass('expanded');
+      if(expanded) {
+        topicTags.removeClass('expanded').addClass('collapsed');
+        topicToggle.text('Show all topics');
+      } else {
+        topicTags.removeClass('collapsed').addClass('expanded');
+        topicToggle.text('Show fewer topics');
+      }
+    });
+  }
 });
 
 </script>
@@ -117,17 +133,18 @@ $(document).ready(function(){
 </div>
 
 <!-- FLASHES -->
-<div id="flashesdiv">
 {% with flashes = get_flashed_messages() %}
-    {% if flashes %}
+  {% if flashes %}
+    <div id="flashesdiv">
       <ul class="flashes">
       {% for message in flashes %}
         <li>{{ message }}</li>
       {% endfor %}
       </ul>
-    {% endif %}
+    </div>
+  {% endif %}
 {% endwith %}
-</div>
+
 <!-- DONATION PROMPT -->
 {% if show_prompt == "yes" %}
 <div id="prompt" style="background-color:#fef3c7; padding:1rem; max-width:1400px; margin:1rem auto; font-size:14px; border-radius:0.5rem; border:1px solid #f59e0b;">
@@ -158,34 +175,27 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
       </div>
 
       <!-- TOPICS (Multi-select tags) -->
+	  {% set max_visible_topics = 6 %}
+      {% set sorted_topics = topics|sort(attribute='count', reverse=True) %}
       <div class="filter-group">
         <label>Topics</label>
-        <div class="tag-list">
-          <label class="tag">
-            <input type="checkbox" name="topics[]" value="cv" />
-            <span>CV</span>
-          </label>
-          <label class="tag">
-            <input type="checkbox" name="topics[]" value="cl" />
-            <span>CL</span>
-          </label>
-          <label class="tag">
-            <input type="checkbox" name="topics[]" value="lg" />
-            <span>LG</span>
-          </label>
-          <label class="tag">
-            <input type="checkbox" name="topics[]" value="ai" />
-            <span>AI</span>
-          </label>
-          <label class="tag">
-            <input type="checkbox" name="topics[]" value="ne" />
-            <span>NE</span>
-          </label>
-          <label class="tag">
-            <input type="checkbox" name="topics[]" value="stat_ml" />
-            <span>stat.ML</span>
-          </label>
+          <div class="tag-list collapsed" id="topic-tags">
+          {% for topic in sorted_topics %}
+            {% set is_extra = (loop.index > max_visible_topics) and (topic.name not in selected_topics) %}
+            <label class="tag {% if is_extra %}tag-extra{% endif %}">
+              <input
+                type="checkbox"
+                name="topics[]"
+                value="{{ topic.name }}"
+                {% if topic.name in selected_topics %}checked{% endif %}
+              />
+              <span>{{ topic.display_name }} ({{ topic.count }})</span>
+            </label>
+          {% endfor %}
         </div>
+		{% if topics|length > max_visible_topics %}
+        <button type="button" class="tag-toggle" id="topics-toggle">Show all topics</button>
+        {% endif %}
       </div>
 
       <!-- SCORE FILTER -->
@@ -203,21 +213,33 @@ To nuke this message away for a long time click <span id="goaway" style="text-de
 
       <!-- SORT OPTIONS -->
       <div class="sort-options">
-        <div class="filter-group">
-          <label for="sortby">Sort By</label>
-          <select id="sortby" name="sortby">
-            <option value="date">Date</option>
-            <option value="score">Score</option>
-            <option value="citation">Citation</option>
-          </select>
-        </div>
-        
-        <div class="filter-group">
-          <label for="sortorder">Order</label>
-          <select id="sortorder" name="sortorder">
-            <option value="desc">Desc</option>
-            <option value="asc">Asc</option>
-          </select>
+       <div class="sort-row">
+          <div class="filter-group sort-control">
+            <label for="sortby">Sort By</label>
+            <div class="select-wrapper">
+              {% set sort_by = request.args.get('sortby', 'date') %}
+              <select id="sortby" name="sortby" class="select-input">
+                <option value="date" {% if sort_by == 'date' %}selected{% endif %}>Date</option>
+                <option value="score" {% if sort_by == 'score' %}selected{% endif %}>Score</option>
+                <option value="citation" {% if sort_by == 'citation' %}selected{% endif %}>Citation</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="filter-group order-control">
+            <label for="sortorder">Order</label>
+            {% set sort_order = request.args.get('sortorder', 'desc') %}
+            <div class="order-toggle" id="sortorder">
+              <label class="order-option">
+                <input type="radio" name="sortorder" value="desc" {% if sort_order == 'desc' %}checked{% endif %}>
+                <span class="order-button">⬇ Desc</span>
+              </label>
+              <label class="order-option">
+                <input type="radio" name="sortorder" value="asc" {% if sort_order == 'asc' %}checked{% endif %}>
+                <span class="order-button">⬆ Asc</span>
+              </label>
+            </div>
+          </div>
         </div>
       </div>
 
