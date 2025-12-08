@@ -542,11 +542,63 @@ h1 {
 	background-color: #f9fafb;
 	overflow-y: auto;
 }
+
+.layout-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 0.5rem;
+	margin-bottom: 1rem;
+}
+
+.layout-label {
+	color: #4b5563;
+	font-weight: 600;
+	font-size: 0.95rem;
+}
+
+.layout-toggle {
+	display: inline-flex;
+	gap: 0.25rem;
+	background: #e5e7eb;
+	border-radius: 0.5rem;
+	padding: 0.15rem;
+}
+
+.layout-btn {
+	border: none;
+	background: transparent;
+	padding: 0.4rem 0.55rem;
+	border-radius: 0.4rem;
+	cursor: pointer;
+	font-size: 1.1rem;
+	line-height: 1;
+	color: #1f2937;
+	transition: background-color 0.15s, box-shadow 0.15s, color 0.15s;
+}
+
+.layout-btn:hover {
+	background-color: #d1d5db;
+}
+
+.layout-btn.active {
+	background-color: #111827;
+	color: #f9fafb;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
 #rtable {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 1rem;
         align-items: start;
+}
+
+#rtable.layout-single {
+	grid-template-columns: 1fr;
+}
+
+#rtable.layout-double {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 /* PAPER CARDS */
@@ -888,18 +940,26 @@ ul.flashes li {
 
 /* RESPONSIVE */
 @media (max-width: 1024px) {
-	.layout-container {
-		flex-direction: column;
-	}
+        .layout-container {
+                flex-direction: column;
+        }
 
-	#rtable {
-		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-	}
-	
-	.filter-panel {
-		width: 100%;
-		border-right: none;
-		border-bottom: 1px solid #1f2937;
+        #rtable {
+                grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        }
+
+        #rtable.layout-single {
+                grid-template-columns: 1fr;
+        }
+
+        #rtable.layout-double {
+                grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        }
+
+        .filter-panel {
+                width: 100%;
+                border-right: none;
+                border-bottom: 1px solid #1f2937;
 	}
 	
 	#maindiv {
@@ -918,16 +978,24 @@ ul.flashes li {
 		padding: 1rem;
 	}
 	
-	#maindiv {
-		padding: 0.75rem;
-	}
-	
-	#rtable {
-		grid-template-columns: 1fr;
-	}
-	.apaper {
-		padding: 1rem;
-	}
+        #maindiv {
+                padding: 0.75rem;
+        }
+
+        #rtable {
+                grid-template-columns: 1fr;
+        }
+
+        #rtable.layout-double {
+                grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        }
+
+        #rtable.layout-single {
+                grid-template-columns: 1fr;
+        }
+        .apaper {
+                padding: 1rem;
+        }
 	
 	.pagelink {
 		padding: 0.5rem 0.75rem;
