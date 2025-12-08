@@ -1035,13 +1035,13 @@ ul.flashes li {
                 grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
         }
 
-ble[data-layout="double"] {
-
-        #rtable.layout-single {
+        #rtable.layout-single,
+        #rtable[data-layout="single"] {
                 grid-template-columns: 1fr;
         }
 
-        #rtable.layout-double {
+        #rtable.layout-double,
+        #rtable[data-layout="double"] {
                 grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
         }
 
