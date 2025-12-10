@@ -297,8 +297,16 @@ $(document).ready(function(){
       <div class="sort-options">
        <div class="sort-row">
           <div class="filter-group sort-control">
-            <div class="sort-header">
-              <label for="sortby">Sort By</label>
+            <label for="sortby">Sort By</label>
+            <div class="sort-control-row">
+              <div class="select-wrapper sort-select">
+                {% set sort_by = request.args.get('sortby', 'date') %}
+                <select id="sortby" name="sortby" class="select-input">
+                  <option value="date" {% if sort_by == 'date' %}selected{% endif %}>Date</option>
+                  <option value="score" {% if sort_by == 'score' %}selected{% endif %}>Score</option>
+                  <option value="citation" {% if sort_by == 'citation' %}selected{% endif %}>Citation</option>
+                </select>
+              </div>
               {% set sort_order = request.args.get('sortorder', 'desc') %}
               <div class="order-toggle" id="sortorder">
                 <label class="order-option">
@@ -310,14 +318,6 @@ $(document).ready(function(){
                   <span class="order-button order-asc">ASC</span>
                 </label>
               </div>
-            </div>
-            <div class="select-wrapper">
-              {% set sort_by = request.args.get('sortby', 'date') %}
-              <select id="sortby" name="sortby" class="select-input">
-                <option value="date" {% if sort_by == 'date' %}selected{% endif %}>Date</option>
-                <option value="score" {% if sort_by == 'score' %}selected{% endif %}>Score</option>
-                <option value="citation" {% if sort_by == 'citation' %}selected{% endif %}>Citation</option>
-              </select>
             </div>
           </div>
         </div>
