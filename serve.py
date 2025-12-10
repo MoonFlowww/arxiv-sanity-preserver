@@ -6,11 +6,14 @@ import argparse
 import dateutil.parser
 from random import shuffle, randrange, uniform
 import math
+import threading
+import uuid
+from typing import Optional
 
 import numpy as np
 from sqlite3 import dbapi2 as sqlite3
 from hashlib import md5
-from flask import Flask, request, url_for, redirect, render_template, abort, g, flash, _app_ctx_stack
+from flask import Flask, request, url_for, redirect, render_template, abort, g, flash, _app_ctx_stack, jsonify
 from flask_limiter import Limiter
 import pymongo
 
@@ -32,6 +35,9 @@ else:
 app = Flask(__name__)
 app.config.from_object(__name__)
 limiter = Limiter(app, global_limits=["100 per hour", "20 per minute"])
+
+ingest_jobs = {}
+ingest_lock = threading.Lock()
 
 # topic browsing globals
 TOPIC_PIDS = {}
@@ -492,25 +498,89 @@ def goaway():
     goaway_collection.insert_one({ 'uid':uid, 'time':int(time.time()) })
   return 'OK'
 
+
+def _init_ingest_job(paper_id: str) -> str:
+  job_id = uuid.uuid4().hex
+  with ingest_lock:
+    ingest_jobs[job_id] = {
+      'paper_id': paper_id,
+      'label': 'Preparing to start the ingest process...',
+      'percent': 0,
+      'messages': [],
+      'done': False,
+      'error': False,
+    }
+  return job_id
+
+
+def _update_ingest_job(job_id: str, label: str, percent: int, message: Optional[str] = None, done: bool = False, error: bool = False):
+  with ingest_lock:
+    job = ingest_jobs.get(job_id)
+    if not job:
+      return
+    job['label'] = label
+    job['percent'] = percent
+    if message:
+      job['messages'].append(message)
+    if done:
+      job['done'] = True
+    if error:
+      job['error'] = True
+
+
+def _get_ingest_job(job_id: str):
+  with ingest_lock:
+    job = ingest_jobs.get(job_id)
+    if not job:
+      return None
+    return dict(job)
+
+
+def _run_ingest_job(job_id: str, paper_id: str):
+  def emit(label: str, percent: int, message: Optional[str] = None):
+    _update_ingest_job(job_id, label, percent, message)
+
+  try:
+    emit('Starting ingest...', 1)
+    ingest_paper(paper_id, progress_callback=emit)
+  except Exception as e:
+    _update_ingest_job(job_id, 'Ingest failed', 100, str(e), done=True, error=True)
+  else:
+    _update_ingest_job(job_id, 'Ingest complete', 100, done=True)
+
+
+@app.route('/ingest/status/<job_id>')
+def ingest_status(job_id):
+  job = _get_ingest_job(job_id)
+  if job is None:
+    return jsonify({'error': 'Unknown job id'}), 404
+  return jsonify(job)
+
 @app.route('/ingest', methods=['POST'])
 def ingest_arxiv():
   paper_id = request.form.get('paper_id', '').strip()
+  wants_json = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.accept_mimetypes['application/json']
   if paper_id == '':
+    if wants_json:
+      return jsonify({'error': 'Please enter an arXiv identifier to add.'}), 400
     flash('Please enter an arXiv identifier to add.')
     return redirect(request.referrer or url_for('intmain'))
 
   if not isvalidid(paper_id):
+    if wants_json:
+      return jsonify({'error': 'Please provide a valid arXiv identifier, e.g., 1512.08756v2.'}), 400
     flash('Please provide a valid arXiv identifier, e.g., 1512.08756v2.')
     return redirect(request.referrer or url_for('intmain'))
 
-  try:
-    ingest_paper(paper_id)
-  except Exception as e:
-    print(f'Error ingesting {paper_id}: {e}')
-    flash(f'Could not ingest {paper_id}: {e}')
-  else:
-    flash(f'Added {paper_id} and refreshed caches.')
+  job_id = _init_ingest_job(paper_id)
+  ingest_thread = threading.Thread(target=_run_ingest_job, args=(job_id, paper_id))
+  ingest_thread.daemon = True
+  ingest_thread.start()
 
+  if wants_json:
+    return jsonify({'job_id': job_id})
+
+  flash(f'Started ingest for {paper_id}.')
   return redirect(url_for('intmain'))
 
 @app.route("/")
