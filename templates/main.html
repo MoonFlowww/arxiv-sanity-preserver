@@ -50,15 +50,8 @@ var show_prompt = "{{ show_prompt }}";
 
 var urlq = ''; // global will be read in to QueryString when load is done
 
-var ingestProgressSteps = [
-  { label: 'Validating identifier...', percent: 12 },
-  { label: 'Fetching arXiv metadata...', percent: 32 },
-  { label: 'Downloading PDF...', percent: 58 },
-  { label: 'Extracting text from PDF...', percent: 78 },
-  { label: 'Refreshing caches...', percent: 100 }
-];
-var ingestStepIndex = 0;
-var ingestProgressTimer = null;
+var ingestPoller = null;
+var ingestLogIndex = 0;
 
 function updateIngestProgress(step) {
   var status = $('#ingest-status-text');
@@ -73,20 +66,40 @@ function updateIngestProgress(step) {
 function showIngestOverlay() {
   var overlay = $('#ingest-overlay');
 
-  if(ingestProgressTimer) { clearInterval(ingestProgressTimer); }
-  ingestStepIndex = 0;
-  updateIngestProgress(ingestProgressSteps[ingestStepIndex]);
+  if(ingestPoller) { clearInterval(ingestPoller); }
+  ingestLogIndex = 0;
+  updateIngestProgress({ label: 'Preparing to start the ingest process...', percent: 0 });
+  $('#ingest-log').empty();
 
   overlay.attr('aria-hidden', 'false').addClass('visible');
+}
 
-  ingestProgressTimer = setInterval(function(){
-    if(ingestStepIndex < ingestProgressSteps.length - 1) {
-      ingestStepIndex += 1;
-      updateIngestProgress(ingestProgressSteps[ingestStepIndex]);
-    } else {
-      clearInterval(ingestProgressTimer);
-    }
-  }, 1200);
+function pollIngestStatus(jobId) {
+  ingestPoller = setInterval(function(){
+    $.getJSON('/ingest/status/' + jobId, function(data){
+      updateIngestProgress({ label: data.label, percent: data.percent });
+      if(data.messages && data.messages.length > ingestLogIndex) {
+        var log = $('#ingest-log');
+        for(var i = ingestLogIndex; i < data.messages.length; i++) {
+          var line = $('<div></div>').text(data.messages[i]);
+          log.append(line);
+        }
+        ingestLogIndex = data.messages.length;
+        log.scrollTop(log[0].scrollHeight);
+      }
+
+      if(data.done) {
+        clearInterval(ingestPoller);
+        ingestPoller = null;
+        if(data.error) {
+          $('#ingest-status-text').text('Ingest failed');
+        }
+      }
+    }).fail(function(){
+      clearInterval(ingestPoller);
+      ingestPoller = null;
+    });
+  }, 1000);
 }
 
 // when page loads...
@@ -159,8 +172,21 @@ $(document).ready(function(){
 
   var ingestForm = $('#ingest-form');
   if(ingestForm.length) {
-    ingestForm.on('submit', function(){
+    ingestForm.on('submit', function(event){
+      event.preventDefault();
       showIngestOverlay();
+
+      $.post('/ingest', ingestForm.serialize(), function(data){
+        if(data.error) {
+          $('#ingest-status-text').text(data.error);
+          return;
+        }
+        if(data.job_id) {
+          pollIngestStatus(data.job_id);
+        }
+      }, 'json').fail(function(){
+        $('#ingest-status-text').text('Could not start ingest. Please try again.');
+      });
     });
   }
 
@@ -365,6 +391,7 @@ $(document).ready(function(){
     <div class="ingest-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="8">
       <div class="ingest-progress-bar" id="ingest-progress-bar" style="width: 8%;"></div>
     </div>
+    <div class="ingest-log" id="ingest-log" aria-live="polite"></div>
     <p class="ingest-note">We'll download the PDF, extract the text, and refresh caches. Feel free to keep this tab open while we work.</p>
   </div>
 </div>

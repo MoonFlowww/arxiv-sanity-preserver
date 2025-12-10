@@ -13,7 +13,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from typing import Tuple
+from typing import Optional, Tuple
 
 import feedparser
 
@@ -153,30 +153,50 @@ def _recompute_caches():
     subprocess.run([sys.executable, "make_cache.py"], check=True)
 
 
-def ingest_paper(paper_id: str):
+def ingest_paper(paper_id: str, progress_callback=None):
+    """Ingest a paper and emit progress updates when a callback is provided."""
+
+    def emit(label: str, percent: int, message: Optional[str] = None):
+        if progress_callback:
+            progress_callback(label, percent, message)
+
+    emit("Validating identifier...", 5)
     if not isvalidid(paper_id):
+        emit("Invalid arXiv identifier", 100, f"{paper_id} is not valid")
         raise ValueError(f"{paper_id} is not a valid arXiv identifier")
 
+    emit("Loading local database...", 10)
     db = _load_database()
+
+    emit("Fetching arXiv metadata...", 20)
     entry, _ = _fetch_metadata(paper_id)
     rawid = entry["_rawid"]
     existing = db.get(rawid)
     if existing and existing.get("_version", 0) >= entry["_version"]:
-        print(f"Paper {paper_id} already present with version {existing['_version']}, refreshing assets only")
+        msg = f"Paper {paper_id} already present with version {existing['_version']}, refreshing assets only"
+        print(msg)
+        emit("Refreshing existing assets...", 25, msg)
     else:
         db[rawid] = entry
         safe_pickle_dump(db, Config.db_path)
-        print(f"Saved metadata for {rawid}v{entry['_version']}")
+        msg = f"Saved metadata for {rawid}v{entry['_version']}"
+        print(msg)
+        emit("Saved metadata", 30, msg)
 
+    emit("Downloading PDF...", 40)
     pdf_path = _ensure_pdf(entry)
+    emit("Extracting text from PDF...", 55)
     txt_path = _ensure_text(pdf_path, entry)
+    emit("Generating thumbnail...", 70)
     thumb_path = _ensure_thumbnail(pdf_path)
 
     print(f"PDF stored at: {pdf_path}")
     print(f"Text stored at: {txt_path}")
     print(f"Thumbnail stored at: {thumb_path}")
 
+    emit("Recomputing caches...", 85)
     _recompute_caches()
+    emit("Finished", 100, "Ingest complete")
 
 
 if __name__ == "__main__":
