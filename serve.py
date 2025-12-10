@@ -2,6 +2,7 @@ import os
 import json
 import re
 import time
+import re
 import pickle
 import argparse
 import dateutil.parser
@@ -395,20 +396,78 @@ def _publication_statuses(paper):
     'conference_status',
   ]
 
-  statuses = []
+  statuses = set()
   for field in status_fields:
     val = paper.get(field)
     if isinstance(val, str):
-      statuses.append(val.lower())
+      statuses.add(val.lower())
     elif isinstance(val, (list, tuple)):
-      statuses.extend([str(v).lower() for v in val])
+      statuses.update([str(v).lower() for v in val])
 
   if paper.get('accepted') or paper.get('is_accepted'):
-    statuses.append('accepted')
+    statuses.add('accepted')
   if paper.get('presented') or paper.get('is_presented'):
-    statuses.append('presented')
+    statuses.add('presented')
 
-  return statuses
+  metadata_fields = [
+    'comment',
+    'comments',
+    'journal_ref',
+    'journal-ref',
+    'journalref',
+    'journal',
+    'annotation',
+    'annotations',
+    'notes',
+  ]
+
+  metadata_chunks = []
+  for field in metadata_fields:
+    val = paper.get(field)
+    if isinstance(val, str):
+      metadata_chunks.append(val)
+    elif isinstance(val, (list, tuple)):
+      metadata_chunks.extend([str(v) for v in val])
+
+  if metadata_chunks:
+    metadata_text = " ".join(metadata_chunks)
+    metadata_lower = metadata_text.lower()
+
+    venue_year_pattern = re.compile(r'\b[A-Za-z][A-Za-z0-9&.+/\-]{2,}\s?(?:20\d{2}|19\d{2}|\'\'?\d{2})\b')
+    has_venue_year = bool(venue_year_pattern.search(metadata_text))
+
+    acceptance_patterns = [
+      r'\baccepted\b',
+      r'\bto appear\b',
+      r'\bin press\b',
+      r'\bcamera[- ]ready\b',
+      r'\bappears in\b',
+      r'\bin proceedings\b',
+      r'\bpublished in\b',
+    ]
+
+    presentation_patterns = [
+      r'\boral\b',
+      r'\bspotlight\b',
+      r'\bposter\b',
+      r'\bpresented at\b',
+      r'\bpresentation at\b',
+      r'\bwill be presented\b',
+      r'\bpresenting at\b',
+      r'\baccepted as an? (oral|poster|spotlight)\b',
+    ]
+
+    if has_venue_year:
+      statuses.add('accepted')
+
+    if any(re.search(pattern, metadata_lower) for pattern in acceptance_patterns):
+      statuses.add('accepted')
+
+    if any(re.search(pattern, metadata_lower) for pattern in presentation_patterns):
+      statuses.add('presented')
+      statuses.add('accepted')
+
+  return list(statuses)
 
 
 def _matches_publication_filters(paper, publication_filters):
