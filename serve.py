@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import time
 import pickle
 import argparse
@@ -10,10 +11,12 @@ import threading
 import uuid
 from typing import Optional
 
+from urllib.parse import urlparse, urlunparse
+
 import numpy as np
 from sqlite3 import dbapi2 as sqlite3
 from hashlib import md5
-from flask import Flask, request, url_for, redirect, render_template, abort, g, flash, _app_ctx_stack, jsonify
+from flask import Flask, request, url_for, redirect, render_template, abort, g, flash, jsonify
 from flask_limiter import Limiter
 import pymongo
 
@@ -286,6 +289,66 @@ def sort_by_impact(paper_db):
   return [pid for _, pid in scored_papers]
 
 
+_URL_PATTERN = re.compile(
+  r"(https?://[^\s<>\]\[\)\(\"']+|www\.github\.com/[^\s<>\]\[\)\(\"']+|github\.com/[^\s<>\]\[\)\(\"']+)",
+  re.IGNORECASE,
+)
+
+
+def _normalize_url(url):
+  if not isinstance(url, str):
+    return None
+
+  cleaned = url.strip().rstrip('.,);\'"')
+  if not cleaned:
+    return None
+
+  if not re.match(r'^[a-zA-Z][a-zA-Z0-9+.-]*://', cleaned):
+    cleaned = 'https://' + cleaned
+
+  parsed = urlparse(cleaned)
+  if not parsed.netloc:
+    return None
+
+  normalized = parsed._replace(netloc=parsed.netloc.lower())
+  return urlunparse(normalized)
+
+
+def _is_github_url(url):
+  parsed = urlparse(url)
+  hostname = parsed.hostname or parsed.netloc
+  if not hostname:
+    return False
+
+  hostname = hostname.lower()
+  return hostname == 'github.com' or hostname.endswith('.github.com')
+
+
+def _extract_urls(value):
+  urls = []
+  if isinstance(value, str):
+    matches = _URL_PATTERN.findall(value)
+    for match in matches:
+      normalized = _normalize_url(match)
+      if normalized:
+        urls.append(normalized)
+  elif isinstance(value, dict):
+    for nested_value in value.values():
+      urls.extend(_extract_urls(nested_value))
+  elif isinstance(value, (list, tuple, set)):
+    for nested_value in value:
+      urls.extend(_extract_urls(nested_value))
+
+  return urls
+
+
+def _value_has_github_url(value):
+  for url in _extract_urls(value):
+    if _is_github_url(url):
+      return True
+  return False
+
+
 def _has_github_link(paper):
   if paper.get('has_github') or paper.get('is_open_source'):
     return True
@@ -297,11 +360,29 @@ def _has_github_link(paper):
     'code_url',
     'code_repository_url',
     'repository_url',
+    'project_url',
+    'project_page',
+    'link',
+    'links',
   ]
 
   for field in github_fields:
-    value = paper.get(field)
-    if isinstance(value, str) and value.strip():
+    if _value_has_github_url(paper.get(field)):
+      return True
+
+  text_fields = [
+    'comment',
+    'comments',
+    'arxiv_comment',
+    'summary',
+  ]
+
+  for field in text_fields:
+    if _value_has_github_url(paper.get(field)):
+      return True
+
+  for value in paper.values():
+    if isinstance(value, str) and 'github' in value.lower() and _value_has_github_url(value):
       return True
 
   return False
