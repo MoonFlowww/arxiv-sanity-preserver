@@ -170,6 +170,19 @@ $(document).ready(function(){
     });
   }
 
+  var filterForm = $('.filter-form');
+  if(filterForm.length) {
+    filterForm.on('reset', function(){
+      setTimeout(function(){
+        if(topicSearch.length && topicTags.length) {
+          topicSearch.val('');
+          topicTags.find('.tag').show();
+          topicTags.addClass('limited');
+        }
+      }, 0);
+    });
+  }
+
   var ingestForm = $('#ingest-form');
   if(ingestForm.length) {
     ingestForm.on('submit', function(event){
@@ -236,7 +249,7 @@ $(document).ready(function(){
       <!-- SEARCH BAR -->
       <div class="filter-group">
         <label for="qfield">Search</label>
-        <input name="q" type="search" id="qfield" placeholder="Keywords...">
+        <input name="q" type="search" id="qfield" placeholder="Keywords..." value="{{ search_query }}">
       </div>
 
       <!-- TOPICS (Multi-select tags) -->
@@ -285,12 +298,50 @@ $(document).ready(function(){
         <label for="scorebar">Minimum Score</label>
         <input
           id="scorebar"
-          name="scorebar"
+          name="min_score"
           type="text"
           placeholder="e.g. 2.5"
           inputmode="decimal"
           pattern="[0-9]*[.]?[0-9]*"
+          value="{{ min_score }}"
         />
+      </div>
+
+      <!-- AVAILABILITY FILTERS -->
+      <div class="filter-group">
+        <label>Availability</label>
+        <label class="checkbox">
+          <input
+            type="checkbox"
+            name="open_source"
+            value="1"
+            {% if open_source %}checked{% endif %}
+          />
+          <span>Open-source (GitHub link)</span>
+        </label>
+      </div>
+
+      <!-- PUBLICATION FILTERS -->
+      <div class="filter-group">
+        <label>Publication</label>
+        <label class="checkbox">
+          <input
+            type="checkbox"
+            name="publication_status"
+            value="accepted"
+            {% if 'accepted' in publication_statuses %}checked{% endif %}
+          />
+          <span>Accepted at conference</span>
+        </label>
+        <label class="checkbox">
+          <input
+            type="checkbox"
+            name="publication_status"
+            value="presented"
+            {% if 'presented' in publication_statuses %}checked{% endif %}
+          />
+          <span>Presented at conference</span>
+        </label>
       </div>
 
       <!-- SORT OPTIONS -->
@@ -300,21 +351,21 @@ $(document).ready(function(){
             <label for="sortby">Sort By</label>
             <div class="sort-control-row">
               <div class="select-wrapper sort-select">
-                {% set sort_by = request.args.get('sortby', 'date') %}
+                {% set sort_by_value = sort_by or 'date' %}
                 <select id="sortby" name="sortby" class="select-input">
-                  <option value="date" {% if sort_by == 'date' %}selected{% endif %}>Date</option>
-                  <option value="score" {% if sort_by == 'score' %}selected{% endif %}>Score</option>
-                  <option value="citation" {% if sort_by == 'citation' %}selected{% endif %}>Citation</option>
+                  <option value="date" {% if sort_by_value == 'date' %}selected{% endif %}>Date</option>
+                  <option value="score" {% if sort_by_value == 'score' %}selected{% endif %}>Score</option>
+                  <option value="citation" {% if sort_by_value == 'citation' %}selected{% endif %}>Citation</option>
                 </select>
               </div>
-              {% set sort_order = request.args.get('sortorder', 'desc') %}
+              {% set sort_order_value = sort_order or 'desc' %}
               <div class="order-toggle" id="sortorder">
                 <label class="order-option">
-                  <input type="radio" name="sortorder" value="desc" {% if sort_order == 'desc' %}checked{% endif %}>
+                  <input type="radio" name="sortorder" value="desc" {% if sort_order_value == 'desc' %}checked{% endif %}>
                   <span class="order-button order-desc">DESC</span>
                 </label>
                 <label class="order-option">
-                  <input type="radio" name="sortorder" value="asc" {% if sort_order == 'asc' %}checked{% endif %}>
+                  <input type="radio" name="sortorder" value="asc" {% if sort_order_value == 'asc' %}checked{% endif %}>
                   <span class="order-button order-asc">ASC</span>
                 </label>
               </div>
@@ -325,7 +376,7 @@ $(document).ready(function(){
 
       <!-- ACTIONS -->
       <div class="filter-actions">
-        <button type="submit" class="btn-primary">Apply</button>
+        <button type="submit" class="btn-primary">Search</button>
         <button type="reset" class="btn-secondary">Reset</button>
       </div>
     </form>

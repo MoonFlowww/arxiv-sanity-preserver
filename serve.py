@@ -286,7 +286,78 @@ def sort_by_impact(paper_db):
   return [pid for _, pid in scored_papers]
 
 
-def filter_papers(papers, topic_names=None, min_score=None):
+def _has_github_link(paper):
+  if paper.get('has_github') or paper.get('is_open_source'):
+    return True
+
+  github_fields = [
+    'github_url',
+    'github_link',
+    'github',
+    'code_url',
+    'code_repository_url',
+    'repository_url',
+  ]
+
+  for field in github_fields:
+    value = paper.get(field)
+    if isinstance(value, str) and value.strip():
+      return True
+
+  return False
+
+
+def _publication_statuses(paper):
+  status_fields = [
+    'publication_status',
+    'published_status',
+    'conference_status',
+  ]
+
+  statuses = []
+  for field in status_fields:
+    val = paper.get(field)
+    if isinstance(val, str):
+      statuses.append(val.lower())
+    elif isinstance(val, (list, tuple)):
+      statuses.extend([str(v).lower() for v in val])
+
+  if paper.get('accepted') or paper.get('is_accepted'):
+    statuses.append('accepted')
+  if paper.get('presented') or paper.get('is_presented'):
+    statuses.append('presented')
+
+  return statuses
+
+
+def _matches_publication_filters(paper, publication_filters):
+  if not publication_filters:
+    return True
+
+  paper_statuses = set(_publication_statuses(paper))
+  if not paper_statuses:
+    return False
+
+  return any(status in paper_statuses for status in publication_filters)
+
+
+def _sort_papers(papers, sort_by='date', sort_order='desc'):
+  reverse = sort_order != 'asc'
+
+  if sort_by == 'score':
+    key_fn = lambda p: p.get('impact_score', float('-inf'))
+  elif sort_by == 'citation':
+    key_fn = lambda p: p.get('citation_count', 0)
+  else:
+    key_fn = lambda p: p.get('time_published', 0)
+
+  for paper in papers:
+    ensure_time_metadata(paper)
+
+  return sorted(papers, key=key_fn, reverse=reverse)
+
+
+def filter_papers(papers, topic_names=None, min_score=None, open_source=False, publication_filters=None):
   filtered = papers
   normalized_topics = _normalize_topics(topic_names)
 
@@ -296,16 +367,26 @@ def filter_papers(papers, topic_names=None, min_score=None):
   if min_score is not None:
     filtered = [p for p in filtered if p.get('impact_score') is not None and p['impact_score'] >= min_score]
 
+  if open_source:
+    filtered = [p for p in filtered if _has_github_link(p)]
+
+  if publication_filters:
+    publication_filters = [f.lower() for f in publication_filters]
+    filtered = [p for p in filtered if _matches_publication_filters(p, publication_filters)]
+
   return filtered
 
 
-def papers_search(qraw, topic_names=None, min_score=None):
+def papers_search(qraw, topic_names=None, min_score=None, open_source=False, publication_filters=None, sort_by=None, sort_order='desc'):
   qparts = qraw.lower().strip().split() if qraw else []
   scores = []
 
   if not qparts:
     base = [db[pid] for pid in DATE_SORTED_PIDS]
-    return filter_papers(base, topic_names=topic_names, min_score=min_score)
+    filtered = filter_papers(base, topic_names=topic_names, min_score=min_score, open_source=open_source, publication_filters=publication_filters)
+    if sort_by:
+      return _sort_papers(filtered, sort_by=sort_by, sort_order=sort_order)
+    return filtered
 
   # use reverse index and accumulate scores
   for pid, p in db.items():
@@ -317,7 +398,10 @@ def papers_search(qraw, topic_names=None, min_score=None):
     scores.append((score, p))
   scores.sort(reverse=True, key=lambda x: x[0]) # descending
   out = [x[1] for x in scores if x[0] > 0]
-  return filter_papers(out, topic_names=topic_names, min_score=min_score)
+  filtered = filter_papers(out, topic_names=topic_names, min_score=min_score, open_source=open_source, publication_filters=publication_filters)
+  if sort_by:
+    return _sort_papers(filtered, sort_by=sort_by, sort_order=sort_order)
+  return filtered
 
 def papers_similar(pid):
   rawpid = strip_version(pid)
@@ -481,6 +565,10 @@ def default_context(papers, **kws):
     selected_topics=[],
     min_score=kws.get('min_score', ''),
     search_query=kws.get('search_query', ''),
+    open_source=kws.get('open_source', False),
+    publication_statuses=kws.get('publication_statuses', []),
+    sort_by=kws.get('sort_by', ''),
+    sort_order=kws.get('sort_order', 'desc'),
   )
   ans.update(kws)
   return ans
@@ -718,14 +806,27 @@ def search():
   legacy_topic = request.args.get('topic', '')
   if legacy_topic and legacy_topic not in selected_topics:
     selected_topics.append(legacy_topic)
-  min_score_str = request.args.get('min_score', '')
+  min_score_str = request.args.get('min_score', request.args.get('scorebar', ''))
+
+  open_source_filter = request.args.get('open_source', '') == '1'
+  publication_statuses = request.args.getlist('publication_status')
+  sort_by = request.args.get('sortby', '')
+  sort_order = request.args.get('sortorder', 'desc')
 
   try:
     min_score = float(min_score_str) if min_score_str != '' else None
   except ValueError:
     min_score = None
 
-  papers = papers_search(q, topic_names=selected_topics, min_score=min_score)
+  papers = papers_search(
+    q,
+    topic_names=selected_topics,
+    min_score=min_score,
+    open_source=open_source_filter,
+    publication_filters=publication_statuses,
+    sort_by=sort_by,
+    sort_order=sort_order,
+  )
   ctx = default_context(
     papers,
     render_format="search",
@@ -734,6 +835,10 @@ def search():
     selected_topics=selected_topics,
     min_score=min_score_str,
     search_query=q,
+    open_source=open_source_filter,
+    publication_statuses=publication_statuses,
+    sort_by=sort_by,
+    sort_order=sort_order,
   )
   return render_template('main.html', **ctx)
 
