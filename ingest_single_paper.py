@@ -18,6 +18,7 @@ from typing import Optional, Tuple
 import feedparser
 
 from fetch_papers import encode_feedparser_dict, parse_arxiv_url
+from repo_metadata import build_repo_metadata
 from utils import Config, isvalidid, safe_pickle_dump
 import pickle
 
@@ -170,12 +171,23 @@ def ingest_paper(paper_id: str, progress_callback=None):
 
     emit("Fetching arXiv metadata...", 20)
     entry, _ = _fetch_metadata(paper_id)
+    repo_metadata = build_repo_metadata(entry)
+    entry.update(repo_metadata)
     rawid = entry["_rawid"]
     existing = db.get(rawid)
     if existing and existing.get("_version", 0) >= entry["_version"]:
         msg = f"Paper {paper_id} already present with version {existing['_version']}, refreshing assets only"
         print(msg)
         emit("Refreshing existing assets...", 25, msg)
+        updated = False
+        for key, value in repo_metadata.items():
+            if existing.get(key) != value:
+                existing[key] = value
+                updated = True
+        if updated:
+            db[rawid] = existing
+            safe_pickle_dump(db, Config.db_path)
+            emit("Updated repository metadata", 28, "Persisted repository metadata")
     else:
         db[rawid] = entry
         safe_pickle_dump(db, Config.db_path)
