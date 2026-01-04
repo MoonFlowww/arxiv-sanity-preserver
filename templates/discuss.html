@@ -58,7 +58,12 @@
                 return;
             }
             var setLabel = function () {
-                toggleButton.textContent = document.documentElement.classList.contains('dark-mode') ? 'Light mode' : 'Dark mode';
+                var isDark = document.documentElement.classList.contains('dark-mode');
+                toggleButton.innerHTML = isDark
+                    ? '<span class="theme-icon" aria-hidden="true">☀️</span>'
+                    : '<span class="theme-icon" aria-hidden="true">🌙</span>';
+                toggleButton.setAttribute('aria-pressed', isDark ? 'true' : 'false');
+                toggleButton.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
             };
             setLabel();
             toggleButton.addEventListener('click', function () {
@@ -289,7 +294,9 @@
 
     <!-- User account information on top right -->
     <div class="header-actions">
-        <button type="button" class="theme-toggle" aria-label="Toggle dark mode">Dark mode</button>
+        <button type="button" class="theme-toggle" aria-label="Switch to dark mode" aria-pressed="false">
+            <span class="theme-icon" aria-hidden="true">🌙</span>
+        </button>
         <div id="userinfo">
             Single-user mode: {{ g.user.username }}
         </div>
