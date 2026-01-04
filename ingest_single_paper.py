@@ -147,7 +147,7 @@ def _ensure_thumbnail(pdf_path: str) -> str:
             "ImageMagick PDF policy blocked conversion; update policy.xml to allow PDF or use an alternate renderer."
         )
         if _is_imagemagick_policy_denial(stderr_output):
-            missing_thumb_path = os.path.join("static", "missing.jpg")
+            missing_thumb_path = os.path.join("static", "missing.svg")
             shutil.copy(missing_thumb_path, thumb_path)
             raise ThumbnailPolicyError(policy_message, thumb_path)
         raise RuntimeError(
@@ -157,7 +157,7 @@ def _ensure_thumbnail(pdf_path: str) -> str:
 
     first_thumb = os.path.join(Config.tmp_dir, "thumb-0.png")
     if not os.path.isfile(first_thumb):
-        missing_thumb_path = os.path.join("static", "missing.jpg")
+        missing_thumb_path = os.path.join("static", "missing.svg")
         shutil.copy(missing_thumb_path, thumb_path)
     else:
         montage_cmd = [
