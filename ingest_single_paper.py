@@ -230,7 +230,7 @@ def _recompute_caches():
     subprocess.run([sys.executable, "make_cache.py"], check=True)
 
 
-def ingest_paper(paper_id: str, progress_callback=None):
+def ingest_paper(paper_id: str, progress_callback=None, recompute_caches: bool = True):
     """Ingest a paper and emit progress updates when a callback is provided."""
 
     def emit(label: str, percent: int, message: Optional[str] = None, warning: bool = False):
@@ -287,18 +287,27 @@ def ingest_paper(paper_id: str, progress_callback=None):
     print(f"Text stored at: {txt_path}")
     print(f"Thumbnail stored at: {thumb_path}")
 
-    emit("Recomputing caches...", 85)
-    _recompute_caches()
-    emit("Finished", 100, "Ingest complete")
+    if recompute_caches:
+        emit("Recomputing caches...", 85)
+        _recompute_caches()
+        emit("Finished", 100, "Ingest complete")
+    else:
+        emit("Skipping cache recompute...", 90, "Recompute queued to run in background.")
+        emit("Finished", 100, "Ingest complete")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Ingest a single arXiv paper end-to-end")
     parser.add_argument("paper_id", nargs="?", help="arXiv identifier, e.g., 1512.08756v2")
+    parser.add_argument(
+        "--no-recompute",
+        action="store_true",
+        help="Skip recomputing caches (useful when triggering recompute separately).",
+    )
     args = parser.parse_args()
 
     paper_id = args.paper_id
     if paper_id is None:
         paper_id = input("Enter arXiv id (e.g., 1512.08756v2): ").strip()
 
-    ingest_paper(paper_id)
+    ingest_paper(paper_id, recompute_caches=not args.no_recompute)

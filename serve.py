@@ -5,6 +5,8 @@ import math
 import numpy as np
 import os
 import pickle
+import subprocess
+import sys
 import pymongo
 import re
 import threading
@@ -40,6 +42,11 @@ ingest_jobs = {}
 ingest_lock = threading.Lock()
 ingest_jobs_dir = Config.ingest_jobs_dir
 data_lock = threading.Lock()
+recompute_lock = threading.Lock()
+recompute_status = {}
+recompute_status_path = os.path.join(ingest_jobs_dir, 'recompute_status.json')
+recompute_stdout_path = os.path.join(ingest_jobs_dir, 'recompute_stdout.log')
+recompute_stderr_path = os.path.join(ingest_jobs_dir, 'recompute_stderr.log')
 
 # topic browsing globals
 TOPIC_PIDS = {}
@@ -794,6 +801,87 @@ def _get_ingest_job(job_id: str):
 def _ensure_ingest_jobs_dir():
     os.makedirs(ingest_jobs_dir, exist_ok=True)
 
+def _persist_recompute_status(status: dict):
+    _ensure_ingest_jobs_dir()
+    with open_atomic(recompute_status_path, 'w') as handle:
+        json.dump(status, handle)
+
+
+def _load_recompute_status():
+    if not os.path.isfile(recompute_status_path):
+        return None
+    with open(recompute_status_path, 'r') as handle:
+        return json.load(handle)
+
+
+def _get_recompute_status():
+    with recompute_lock:
+        status = recompute_status.get('state') or _load_recompute_status()
+        if not status:
+            status = {
+                'status': 'idle',
+                'updated_at': int(time.time()),
+                'stdout_path': recompute_stdout_path,
+                'stderr_path': recompute_stderr_path,
+            }
+            recompute_status['state'] = status
+            _persist_recompute_status(status)
+        return dict(status)
+
+
+def _update_recompute_status(status: str, message: Optional[str] = None, error: Optional[str] = None):
+    with recompute_lock:
+        state = recompute_status.get('state') or _load_recompute_status() or {
+            'status': 'idle',
+            'updated_at': int(time.time()),
+            'stdout_path': recompute_stdout_path,
+            'stderr_path': recompute_stderr_path,
+        }
+        state['status'] = status
+        state['updated_at'] = int(time.time())
+        if message:
+            state['message'] = message
+        if error:
+            state['error'] = error
+        recompute_status['state'] = state
+        _persist_recompute_status(state)
+
+
+def _run_recompute_job():
+    try:
+        _update_recompute_status('running', message='Recomputing caches')
+        _ensure_ingest_jobs_dir()
+        with open(recompute_stdout_path, 'a') as stdout_handle, open(recompute_stderr_path, 'a') as stderr_handle:
+            stdout_handle.write(f'[{time.ctime()}] Starting recompute\n')
+            stderr_handle.write(f'[{time.ctime()}] Starting recompute\n')
+            steps = [
+                ('analyze.py', True),
+                ('buildsvm.py', False),
+                ('make_cache.py', True),
+            ]
+            for script_name, required in steps:
+                _update_recompute_status('running', message=f'Running {script_name}')
+                stdout_handle.write(f'[{time.ctime()}] Running {script_name}\n')
+                stderr_handle.write(f'[{time.ctime()}] Running {script_name}\n')
+                proc = subprocess.run(
+                    [sys.executable, script_name],
+                    check=required,
+                    stdout=stdout_handle,
+                    stderr=stderr_handle,
+                    text=True,
+                )
+                if proc.returncode != 0 and not required:
+                    stderr_handle.write(
+                        f'[{time.ctime()}] {script_name} exited with {proc.returncode}\n'
+                    )
+            stdout_handle.write(f'[{time.ctime()}] Recompute finished\n')
+            stderr_handle.write(f'[{time.ctime()}] Recompute finished\n')
+        _refresh_serving_data()
+    except Exception as exc:
+        _update_recompute_status('failed', error=str(exc), message='Recompute failed')
+    else:
+        _update_recompute_status('finished', message='Recompute finished successfully')
+
 
 def _ingest_job_path(job_id: str) -> str:
     return os.path.join(ingest_jobs_dir, f'{job_id}.json')
@@ -818,9 +906,16 @@ def _run_ingest_job(job_id: str, paper_id: str):
         _update_ingest_job(job_id, label, percent, message, warning=warning)
     try:
         emit('Starting ingest...', 1)
-        ingest_paper(paper_id, progress_callback=emit)
-        emit('Refreshing server data...', 95)
-        _refresh_serving_data()
+        ingest_paper(paper_id, progress_callback=emit, recompute_caches=False)
+        recompute_state = _get_recompute_status()
+        if recompute_state.get('status') == 'running':
+            emit('Recompute already running...', 90, 'Existing cache recompute is still running.')
+        else:
+            emit('Queued recompute...', 90, 'Cache recompute will run in the background.')
+            _update_recompute_status('queued', message='Recompute queued')
+            recompute_thread = threading.Thread(target=_run_recompute_job)
+            recompute_thread.daemon = True
+            recompute_thread.start()
     except Exception as e:
         _update_ingest_job(job_id, 'Ingest failed', 100, str(e), done=True, error=True)
     else:
@@ -833,6 +928,10 @@ def ingest_status(job_id):
     if job is None:
         return jsonify({'error': 'Unknown job id'}), 404
     return jsonify(job)
+
+@app.route('/ingest/recompute_status')
+def ingest_recompute_status():
+    return jsonify(_get_recompute_status())
 
 
 @app.route('/ingest', methods=['POST'])
