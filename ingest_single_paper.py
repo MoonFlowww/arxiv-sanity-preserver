@@ -74,7 +74,7 @@ def _ensure_pdf(entry: dict) -> str:
     return fname
 
 
-def _ensure_text(pdf_path: str, entry: dict) -> str:
+def _ensure_text(pdf_path: str, entry: dict) -> Tuple[str, str]:
     if not shutil.which("pdftotext"):
         raise RuntimeError("pdftotext is required to extract text")
     os.makedirs(Config.txt_dir, exist_ok=True)
@@ -83,19 +83,21 @@ def _ensure_text(pdf_path: str, entry: dict) -> str:
     txt_path = os.path.join(Config.txt_dir, pdf_basename + ".txt")
     if os.path.isfile(txt_path):
         print(f"Text already exists at {txt_path}")
-        return txt_path
+        return txt_path, "existing"
 
     subprocess.run(["pdftotext", pdf_path, txt_path], check=False)
     if not os.path.isfile(txt_path):
         print(f"Could not parse {pdf_basename} to text; creating empty placeholder")
         open(txt_path, "w").close()
-    return txt_path
+        return txt_path, "placeholder"
+    return txt_path, "extracted"
 
 
 class ThumbnailPolicyError(RuntimeError):
-    def __init__(self, message: str, thumb_path: str):
+    def __init__(self, message: str, thumb_path: str, renderer: str):
         super().__init__(message)
         self.thumb_path = thumb_path
+        self.renderer = renderer
 
 
 def _is_imagemagick_policy_denial(stderr_output: str) -> bool:
@@ -149,7 +151,7 @@ def _render_thumbnail_with_pdftoppm(pdf_path: str, thumb_path: str) -> bool:
     subprocess.run(montage_cmd, check=False)
     return os.path.isfile(thumb_path)
 
-def _ensure_thumbnail(pdf_path: str) -> str:
+def _ensure_thumbnail(pdf_path: str) -> Tuple[str, str]:
     if not shutil.which("convert"):
         raise RuntimeError("ImageMagick's convert is required for thumbnails")
 
@@ -160,7 +162,7 @@ def _ensure_thumbnail(pdf_path: str) -> str:
     thumb_path = os.path.join(Config.thumbs_dir, pdf_basename + ".jpg")
     if os.path.isfile(thumb_path):
         print(f"Thumbnail already exists at {thumb_path}")
-        return thumb_path
+        return thumb_path, "existing"
 
     # Clear temporary files from previous runs
     for i in range(8):
@@ -194,10 +196,10 @@ def _ensure_thumbnail(pdf_path: str) -> str:
         )
         if _is_imagemagick_policy_denial(stderr_output):
             if _render_thumbnail_with_pdftoppm(pdf_path, thumb_path):
-                return thumb_path
+                return thumb_path, "pdftoppm"
             missing_thumb_path = os.path.join("static", "missing.svg")
             shutil.copy(missing_thumb_path, thumb_path)
-            raise ThumbnailPolicyError(policy_message, thumb_path)
+            raise ThumbnailPolicyError(policy_message, thumb_path, "missing.svg")
         raise RuntimeError(
             "Thumbnail generation failed with exit code %s.\nstdout: %s\nstderr: %s"
             % (convert_proc.returncode, stdout_output.strip(), stderr_output.strip())
@@ -220,7 +222,7 @@ def _ensure_thumbnail(pdf_path: str) -> str:
             thumb_path,
         ]
         subprocess.run(montage_cmd, check=False)
-    return thumb_path
+    return thumb_path, "imagemagick"
 
 
 def _recompute_caches():
@@ -237,20 +239,24 @@ def ingest_paper(paper_id: str, progress_callback=None, recompute_caches: bool =
         if progress_callback:
             progress_callback(label, percent, message, warning=warning)
 
-    emit("Validating identifier...", 5)
+    emit("Validating identifier...", 5, "Validating arXiv identifier")
     if not isvalidid(paper_id):
         emit("Invalid arXiv identifier", 100, f"{paper_id} is not valid")
         raise ValueError(f"{paper_id} is not a valid arXiv identifier")
+    emit("Validated identifier", 7, f"{paper_id} is valid")
 
-    emit("Loading local database...", 10)
+    emit("Loading local database...", 10, "Loading local metadata database")
     db = _load_database()
+    emit("Loaded local database", 12, "Local metadata database loaded")
 
-    emit("Fetching arXiv metadata...", 20)
+    emit("Fetching arXiv metadata...", 20, f"Fetching metadata for {paper_id}")
     entry, _ = _fetch_metadata(paper_id)
     repo_metadata = build_repo_metadata(entry)
     entry.update(repo_metadata)
+    emit("Fetched arXiv metadata", 22, f"Fetched metadata for {paper_id}")
     rawid = entry["_rawid"]
     existing = db.get(rawid)
+    emit("Saving metadata...", 24, f"Saving metadata for {rawid}")
     if existing and existing.get("_version", 0) >= entry["_version"]:
         msg = f"Paper {paper_id} already present with version {existing['_version']}, refreshing assets only"
         print(msg)
@@ -264,6 +270,8 @@ def ingest_paper(paper_id: str, progress_callback=None, recompute_caches: bool =
             db[rawid] = existing
             safe_pickle_dump(db, Config.db_path)
             emit("Updated repository metadata", 28, "Persisted repository metadata")
+        else:
+            emit("Metadata unchanged", 28, "Existing metadata already up to date")
     else:
         db[rawid] = entry
         safe_pickle_dump(db, Config.db_path)
@@ -271,24 +279,34 @@ def ingest_paper(paper_id: str, progress_callback=None, recompute_caches: bool =
         print(msg)
         emit("Saved metadata", 30, msg)
 
-    emit("Downloading PDF...", 40)
+    emit("Downloading PDF...", 40, "Starting PDF download")
     pdf_path = _ensure_pdf(entry)
-    emit("Extracting text from PDF...", 55)
-    txt_path = _ensure_text(pdf_path, entry)
-    emit("Generating thumbnail...", 70)
+    emit("Downloaded PDF", 48, f"PDF ready at {pdf_path}")
+    emit("Extracting text from PDF...", 55, "Starting text extraction")
+    txt_path, text_status = _ensure_text(pdf_path, entry)
+    if text_status == "existing":
+        emit("Extracted text", 62, f"Text already present at {txt_path}")
+    elif text_status == "placeholder":
+        emit("Extracted text", 62, f"Created empty text placeholder at {txt_path}")
+    else:
+        emit("Extracted text", 62, f"Text extracted to {txt_path}")
+    emit("Generating thumbnail...", 70, "Starting thumbnail generation")
     try:
-        thumb_path = _ensure_thumbnail(pdf_path)
+        thumb_path, thumb_renderer = _ensure_thumbnail(pdf_path)
+        emit("Generated thumbnail", 78, f"Thumbnail ready at {thumb_path} (renderer: {thumb_renderer})")
     except ThumbnailPolicyError as exc:
         emit("Generating thumbnail...", 70, f"Thumbnail warning: {exc}", warning=True)
         thumb_path = exc.thumb_path
+        emit("Generated thumbnail", 78, f"Thumbnail ready at {thumb_path} (renderer: {exc.renderer})", warning=True)
 
     print(f"PDF stored at: {pdf_path}")
     print(f"Text stored at: {txt_path}")
     print(f"Thumbnail stored at: {thumb_path}")
 
     if recompute_caches:
-        emit("Recomputing caches...", 85)
+        emit("Recomputing caches...", 85, "Recompute running now")
         _recompute_caches()
+        emit("Recomputed caches", 95, "Cache recompute finished")
         emit("Finished", 100, "Ingest complete")
     else:
         emit("Skipping cache recompute...", 90, "Recompute queued to run in background.")
