@@ -102,18 +102,34 @@
     </script>
 
     <script>
-        var username = "{{ g.user.username }}";
-        var followers = {
-        {
-            followers | tojson
-        }
-        }
+        (function () {
+            var storedTheme = localStorage.getItem('theme');
+            if (storedTheme === 'dark') {
+                document.documentElement.classList.add('dark-mode');
+            }
+        })();
 
-        var following = {
-        {
-            following | tojson
+        function initThemeToggle() {
+            var toggleButton = document.querySelector('.theme-toggle');
+            if (!toggleButton) {
+                return;
+            }
+            var setLabel = function () {
+                toggleButton.textContent = document.documentElement.classList.contains('dark-mode') ? 'Light mode' : 'Dark mode';
+            };
+            setLabel();
+            toggleButton.addEventListener('click', function () {
+                document.documentElement.classList.toggle('dark-mode');
+                var isDark = document.documentElement.classList.contains('dark-mode');
+                localStorage.setItem('theme', isDark ? 'dark' : 'light');
+                setLabel();
+            });
         }
-        }
+    </script>
+    <script>
+        var username = "{{ g.user.username }}";
+        var followers = {{followers | tojson}};
+        var following = {{following | tojson}};
 
 
         function populateList(lstid, msg, lst) {
@@ -203,6 +219,7 @@
         $(document).ready(function () {
             populateList('followers', ' followers:', followers);
             populateList('following', ' following:', following);
+            initThemeToggle();
         });
 
     </script>
@@ -218,8 +235,11 @@
 <div id="titdiv">
 
     <!-- User account information on top right -->
-    <div id="userinfo">
-        Single-user mode: {{ g.user.username }}
+    <div class="header-actions">
+        <button type="button" class="theme-toggle" aria-label="Toggle dark mode">Dark mode</button>
+        <div id="userinfo">
+            Single-user mode: {{ g.user.username }}
+        </div>
     </div>
 
     <!-- Site information/banner on top left -->

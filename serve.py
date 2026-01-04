@@ -821,6 +821,7 @@ def _get_recompute_status():
             status = {
                 'status': 'idle',
                 'updated_at': int(time.time()),
+                'percent': 0,
                 'stdout_path': recompute_stdout_path,
                 'stderr_path': recompute_stderr_path,
             }
@@ -829,11 +830,12 @@ def _get_recompute_status():
         return dict(status)
 
 
-def _update_recompute_status(status: str, message: Optional[str] = None, error: Optional[str] = None):
+def _update_recompute_status(status: str, message: Optional[str] = None, error: Optional[str] = None, percent: Optional[int] = None):
     with recompute_lock:
         state = recompute_status.get('state') or _load_recompute_status() or {
             'status': 'idle',
             'updated_at': int(time.time()),
+            'percent': 0,
             'stdout_path': recompute_stdout_path,
             'stderr_path': recompute_stderr_path,
         }
@@ -843,13 +845,15 @@ def _update_recompute_status(status: str, message: Optional[str] = None, error: 
             state['message'] = message
         if error:
             state['error'] = error
+        if percent is not None:
+            state['percent'] = percent
         recompute_status['state'] = state
         _persist_recompute_status(state)
 
 
 def _run_recompute_job():
     try:
-        _update_recompute_status('running', message='Recomputing caches')
+        _update_recompute_status('running', message='Recomputing caches', percent=0)
         _ensure_ingest_jobs_dir()
         with open(recompute_stdout_path, 'a') as stdout_handle, open(recompute_stderr_path, 'a') as stderr_handle:
             stdout_handle.write(f'[{time.ctime()}] Starting recompute\n')
@@ -859,8 +863,13 @@ def _run_recompute_job():
                 ('buildsvm.py', False),
                 ('make_cache.py', True),
             ]
-            for script_name, required in steps:
-                _update_recompute_status('running', message=f'Running {script_name}')
+            total_steps = len(steps)
+            for step_index, (script_name, required) in enumerate(steps):
+                _update_recompute_status(
+                    'running',
+                    message=f'Running {script_name}',
+                    percent=int((step_index / total_steps) * 100),
+                )
                 stdout_handle.write(f'[{time.ctime()}] Running {script_name}\n')
                 stderr_handle.write(f'[{time.ctime()}] Running {script_name}\n')
                 proc = subprocess.run(
@@ -874,13 +883,18 @@ def _run_recompute_job():
                     stderr_handle.write(
                         f'[{time.ctime()}] {script_name} exited with {proc.returncode}\n'
                     )
+                _update_recompute_status(
+                    'running',
+                    message=f'Finished {script_name}',
+                    percent=int(((step_index + 1) / total_steps) * 100),
+                )
             stdout_handle.write(f'[{time.ctime()}] Recompute finished\n')
             stderr_handle.write(f'[{time.ctime()}] Recompute finished\n')
         _refresh_serving_data()
     except Exception as exc:
         _update_recompute_status('failed', error=str(exc), message='Recompute failed')
     else:
-        _update_recompute_status('finished', message='Recompute finished successfully')
+        _update_recompute_status('finished', message='Recompute finished successfully', percent=100)
 
 
 def _ingest_job_path(job_id: str) -> str:
@@ -912,7 +926,7 @@ def _run_ingest_job(job_id: str, paper_id: str):
             emit('Recompute already running...', 90, 'Existing cache recompute is still running.')
         else:
             emit('Queued recompute...', 90, 'Cache recompute will run in the background.')
-            _update_recompute_status('queued', message='Recompute queued')
+            _update_recompute_status('queued', message='Recompute queued', percent=0)
             recompute_thread = threading.Thread(target=_run_recompute_job)
             recompute_thread.daemon = True
             recompute_thread.start()

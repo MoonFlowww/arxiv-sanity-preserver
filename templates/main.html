@@ -42,6 +42,31 @@
         ga('send', 'pageview');
 
     </script>
+    <script>
+        (function () {
+            var storedTheme = localStorage.getItem('theme');
+            if (storedTheme === 'dark') {
+                document.documentElement.classList.add('dark-mode');
+            }
+        })();
+
+        function initThemeToggle() {
+            var toggleButton = document.querySelector('.theme-toggle');
+            if (!toggleButton) {
+                return;
+            }
+            var setLabel = function () {
+                toggleButton.textContent = document.documentElement.classList.contains('dark-mode') ? 'Light mode' : 'Dark mode';
+            };
+            setLabel();
+            toggleButton.addEventListener('click', function () {
+                document.documentElement.classList.toggle('dark-mode');
+                var isDark = document.documentElement.classList.contains('dark-mode');
+                localStorage.setItem('theme', isDark ? 'dark' : 'light');
+                setLabel();
+            });
+        }
+    </script>
 
     <script>
 
@@ -63,7 +88,6 @@
         var ingestPoller = null;
         var ingestLogIndex = 0;
         var recomputePoller = null;
-        var recomputeDismissed = false;
         var recomputeLastStatus = null;
 
         function updateIngestProgress(step) {
@@ -116,12 +140,14 @@
                 });
             }, 1000);
         }
-        function showRecomputePanel(message, level) {
+        function showRecomputePanel(message, percent, level) {
             var panel = $('#recompute-status-panel');
             var text = $('#recompute-status-text');
+            var progress = $('#recompute-status-percent');
             var levelClass = level ? 'recompute-' + level : '';
 
             text.text(message);
+            progress.text(percent + '%');
             panel.removeClass('recompute-error recompute-info recompute-success');
             if (levelClass) {
                 panel.addClass(levelClass);
@@ -145,21 +171,19 @@
         function updateRecomputeStatus(state) {
             var status = state.status || 'idle';
             recomputeLastStatus = status;
+            var percent = typeof state.percent === 'number' ? state.percent : 0;
+            var message = state.message || 'Recomputing caches...';
 
             if (status === 'running' || status === 'queued') {
                 updateRecomputeBadge(false);
-                if (!recomputeDismissed) {
-                    showRecomputePanel('Recomputing caches...', 'info');
-                }
+                showRecomputePanel(message, percent, 'info');
             } else if (status === 'finished') {
                 hideRecomputePanel();
                 updateRecomputeBadge(true);
             } else if (status === 'failed') {
                 updateRecomputeBadge(false);
-                if (!recomputeDismissed) {
-                    var errorMessage = state.error ? ('Recompute failed: ' + state.error) : 'Recompute failed.';
-                    showRecomputePanel(errorMessage, 'error');
-                }
+                var errorMessage = state.error ? ('Recompute failed: ' + state.error) : 'Recompute failed.';
+                showRecomputePanel(errorMessage, percent, 'error');
             } else {
                 hideRecomputePanel();
                 updateRecomputeBadge(false);
@@ -279,7 +303,6 @@
                 ingestForm.on('submit', function (event) {
                     event.preventDefault();
                     showIngestOverlay();
-                    recomputeDismissed = false;
                     updateRecomputeBadge(false);
 
                     $.post('/ingest', ingestForm.serialize(), function (data) {
@@ -295,15 +318,10 @@
                     });
                 });
             }
-
-            $('#recompute-hide-button').on('click', function () {
-                recomputeDismissed = true;
-                hideRecomputePanel();
-            });
-
             startRecomputePolling();
 
             initLayoutToggle('.layout-btn');
+            initThemeToggle();
         });
 
     </script>
@@ -314,6 +332,9 @@
 <!-- HEADER -->
 <div id="titdiv">
     <!-- Site information/banner -->
+    <div class="header-actions">
+        <button type="button" class="theme-toggle" aria-label="Toggle dark mode">Dark mode</button>
+    </div>
     <a href="/">
         <div id="tittxt">
             <h1>Arxiv Sanity Preserver</h1>
@@ -492,7 +513,7 @@
             <div class="recompute-status-panel" id="recompute-status-panel" aria-hidden="true">
                 <div class="recompute-status-content">
                     <span id="recompute-status-text">Recomputing caches...</span>
-                    <button type="button" class="recompute-hide" id="recompute-hide-button">Hide process</button>
+                    <span class="recompute-progress" id="recompute-status-percent">0%</span>
                 </div>
             </div>
         </div>
