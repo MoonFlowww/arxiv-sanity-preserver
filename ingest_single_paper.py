@@ -102,6 +102,52 @@ def _is_imagemagick_policy_denial(stderr_output: str) -> bool:
     lowered = stderr_output.lower()
     return "security policy" in lowered or "not allowed by the security policy 'pdf'" in lowered
 
+def _render_thumbnail_with_pdftoppm(pdf_path: str, thumb_path: str) -> bool:
+    if not shutil.which("pdftoppm"):
+        print("Warning: pdftoppm is unavailable; cannot render thumbnail without ImageMagick PDF support.")
+        return False
+
+    pdftoppm_cmd = [
+        "pdftoppm",
+        "-f",
+        "1",
+        "-l",
+        "8",
+        "-png",
+        pdf_path,
+        os.path.join(Config.tmp_dir, "thumb"),
+    ]
+    pdftoppm_proc = subprocess.run(pdftoppm_cmd, check=False, capture_output=True, text=True)
+    if pdftoppm_proc.returncode != 0:
+        print(
+            "Warning: pdftoppm failed to render thumbnail; "
+            "cannot render thumbnail without ImageMagick PDF support."
+        )
+        return False
+
+    for i in range(1, 9):
+        source = os.path.join(Config.tmp_dir, f"thumb-{i}.png")
+        target = os.path.join(Config.tmp_dir, f"thumb-{i - 1}.png")
+        if os.path.isfile(source):
+            os.replace(source, target)
+
+    first_thumb = os.path.join(Config.tmp_dir, "thumb-0.png")
+    if not os.path.isfile(first_thumb):
+        return False
+
+    montage_cmd = [
+        "montage",
+        "-mode",
+        "concatenate",
+        "-quality",
+        "80",
+        "-tile",
+        "x1",
+        os.path.join(Config.tmp_dir, "thumb-*.png"),
+        thumb_path,
+    ]
+    subprocess.run(montage_cmd, check=False)
+    return os.path.isfile(thumb_path)
 
 def _ensure_thumbnail(pdf_path: str) -> str:
     if not shutil.which("convert"):
@@ -147,6 +193,8 @@ def _ensure_thumbnail(pdf_path: str) -> str:
             "ImageMagick PDF policy blocked conversion; update policy.xml to allow PDF or use an alternate renderer."
         )
         if _is_imagemagick_policy_denial(stderr_output):
+            if _render_thumbnail_with_pdftoppm(pdf_path, thumb_path):
+                return thumb_path
             missing_thumb_path = os.path.join("static", "missing.svg")
             shutil.copy(missing_thumb_path, thumb_path)
             raise ThumbnailPolicyError(policy_message, thumb_path)
