@@ -200,7 +200,11 @@ def ingest_paper(paper_id: str, progress_callback=None):
     emit("Extracting text from PDF...", 55)
     txt_path = _ensure_text(pdf_path, entry)
     emit("Generating thumbnail...", 70)
-    thumb_path = _ensure_thumbnail(pdf_path)
+    try:
+        thumb_path = _ensure_thumbnail(pdf_path)
+    except Exception as exc:
+        emit("Generating thumbnail...", 70, f"Thumbnail generation failed: {exc}")
+        raise
 
     print(f"PDF stored at: {pdf_path}")
     print(f"Text stored at: {txt_path}")
