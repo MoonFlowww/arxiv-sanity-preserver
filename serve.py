@@ -934,6 +934,17 @@ def ingest_recompute_status():
     return jsonify(_get_recompute_status())
 
 
+@app.route('/recompute/status')
+def recompute_status_endpoint():
+    status = _get_recompute_status()
+    return jsonify({
+        'status': status.get('status'),
+        'message': status.get('message'),
+        'updated_at': status.get('updated_at'),
+        'error': status.get('error'),
+    })
+
+
 @app.route('/ingest', methods=['POST'])
 def ingest_arxiv():
     paper_id = request.form.get('paper_id', '').strip()
