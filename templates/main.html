@@ -401,17 +401,26 @@ $(document).ready(function(){
         >
           ▢
         </button>
-        <button
-          type="button"
-          class="layout-btn"
-          data-layout="double"
-          aria-label="Two-column layout"
-          title="Two-column layout"
-        >
-          ▦
-        </button>
+          <button type="button" class="layout-btn" data-layout="double" aria-label="Two-column layout" title="Two-column layout">
+              <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                  <rect x="3"  y="3"  width="4" height="4" rx="0.6"></rect>
+                  <rect x="10" y="3"  width="4" height="4" rx="0.6"></rect>
+                  <rect x="17" y="3"  width="4" height="4" rx="0.6"></rect>
+
+                  <rect x="3"  y="10" width="4" height="4" rx="0.6"></rect>
+                  <rect x="10" y="10" width="4" height="4" rx="0.6"></rect>
+                  <rect x="17" y="10" width="4" height="4" rx="0.6"></rect>
+
+                  <rect x="3"  y="17" width="4" height="4" rx="0.6"></rect>
+                  <rect x="10" y="17" width="4" height="4" rx="0.6"></rect>
+                  <rect x="17" y="17" width="4" height="4" rx="0.6"></rect>
+              </svg>
+          </button>
       </div>
     </div>
+      {% if no_results_message %}
+      <div class="msg">{{ no_results_message }}</div>
+      {% endif %}
 
     <div id="rtable" data-layout="double"></div>
 

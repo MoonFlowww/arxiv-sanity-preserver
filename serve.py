@@ -986,6 +986,10 @@ def search():
     sort_by=sort_by,
     sort_order=sort_order,
   )
+  no_results_message = ''
+  if len(papers) == 0:
+    topics_display = ', '.join(selected_topics) if selected_topics else '[]'
+    no_results_message = 'No paper found for criteria in databases %s' % (topics_display,)
   ctx = default_context(
     papers,
     render_format="search",
@@ -998,6 +1002,7 @@ def search():
     publication_statuses=publication_statuses,
     sort_by=sort_by,
     sort_order=sort_order,
+    no_results_message=no_results_message,
   )
   return render_template('main.html', **ctx)
 
