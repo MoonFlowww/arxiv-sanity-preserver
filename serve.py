@@ -619,7 +619,7 @@ def encode_json(ps, n=10, send_images=True, send_abstracts=True):
       thumb_fname = idvv + '.pdf.jpg'
       thumb_path = os.path.join(Config.thumbs_dir, thumb_fname)
       if not os.path.isfile(thumb_path):
-        struct['img'] = '/static/missing.jpg'
+        struct['img'] = '/static/missing.svg'
       else:
         struct['img'] = '/static/thumbs/' + thumb_fname
     struct['tags'] = [t['term'] for t in p['tags']]
