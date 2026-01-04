@@ -19,7 +19,8 @@ from flask_limiter import Limiter
 import pymongo
 
 from ingest_single_paper import ingest_paper
-from utils import safe_pickle_dump, strip_version, isvalidid, Config
+from utils import safe_pickle_dump, strip_version, isvalidid, Config, open_atomic
+
 
 # various globals
 # -----------------------------------------------------------------------------
@@ -39,6 +40,7 @@ limiter = Limiter(app, global_limits=["100 per hour", "20 per minute"])
 
 ingest_jobs = {}
 ingest_lock = threading.Lock()
+ingest_jobs_dir = Config.ingest_jobs_dir
 
 # topic browsing globals
 TOPIC_PIDS = {}
@@ -637,15 +639,21 @@ def goaway():
 
 def _init_ingest_job(paper_id: str) -> str:
   job_id = uuid.uuid4().hex
+  now = int(time.time())
   with ingest_lock:
     ingest_jobs[job_id] = {
+      'job_id': job_id,
       'paper_id': paper_id,
       'label': 'Preparing to start the ingest process...',
       'percent': 0,
       'messages': [],
       'done': False,
       'error': False,
+      'status': 'running',
+      'created_at': now,
+      'updated_at': now,
     }
+    _persist_ingest_job(ingest_jobs[job_id])
   return job_id
 
 
@@ -653,7 +661,9 @@ def _update_ingest_job(job_id: str, label: str, percent: int, message: Optional[
   with ingest_lock:
     job = ingest_jobs.get(job_id)
     if not job:
-      return
+        job = _load_ingest_job(job_id)
+        if not job:
+            return
     job['label'] = label
     job['percent'] = percent
     if message:
@@ -662,15 +672,47 @@ def _update_ingest_job(job_id: str, label: str, percent: int, message: Optional[
       job['done'] = True
     if error:
       job['error'] = True
+      job['done'] = True
+    if job.get('error'):
+      job['status'] = 'error'
+    elif job.get('done'):
+      job['status'] = 'done'
+    else:
+      job['status'] = 'running'
+    job['updated_at'] = int(time.time())
+    ingest_jobs[job_id] = job
+    _persist_ingest_job(job)
 
 
 def _get_ingest_job(job_id: str):
   with ingest_lock:
     job = ingest_jobs.get(job_id)
     if not job:
-      return None
+        job = _load_ingest_job(job_id)
+    if not job:
+        return None
     return dict(job)
 
+def _ensure_ingest_jobs_dir():
+    os.makedirs(ingest_jobs_dir, exist_ok=True)
+
+
+def _ingest_job_path(job_id: str) -> str:
+    return os.path.join(ingest_jobs_dir, f'{job_id}.json')
+
+
+def _persist_ingest_job(job: dict):
+    _ensure_ingest_jobs_dir()
+    with open_atomic(_ingest_job_path(job['job_id']), 'w') as handle:
+        json.dump(job, handle)
+
+
+def _load_ingest_job(job_id: str):
+    path = _ingest_job_path(job_id)
+    if not os.path.isfile(path):
+        return None
+    with open(path, 'r') as handle:
+        return json.load(handle)
 
 def _run_ingest_job(job_id: str, paper_id: str):
   def emit(label: str, percent: int, message: Optional[str] = None):

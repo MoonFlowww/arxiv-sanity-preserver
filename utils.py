@@ -23,6 +23,7 @@ class Config(object):
     db_serve_path = 'db2.p' # an enriched db.p with various preprocessing info
     database_path = 'as.db'
     serve_cache_path = 'serve_cache.p'
+    ingest_jobs_dir = os.path.join('data', 'ingest_jobs')
     
     beg_for_hosting_money = 1 # do we beg the active users randomly for money? 0 = no.
     banned_path = 'banned.txt' # for twitter users who are banned
