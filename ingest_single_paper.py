@@ -281,7 +281,6 @@ def ingest_paper(paper_id: str, progress_callback=None, recompute_caches: bool =
     except ThumbnailPolicyError as exc:
         emit("Generating thumbnail...", 70, f"Thumbnail warning: {exc}", warning=True)
         thumb_path = exc.thumb_path
-        raise
 
     print(f"PDF stored at: {pdf_path}")
     print(f"Text stored at: {txt_path}")
