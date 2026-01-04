@@ -942,6 +942,7 @@ def toggletag():
 def search():
   q = request.args.get('q', '') # get the search request
   selected_topics = request.args.getlist('topics')
+  selected_topics += request.args.getlist('topics[]')
   # support legacy single topic param if present
   legacy_topic = request.args.get('topic', '')
   if legacy_topic and legacy_topic not in selected_topics:

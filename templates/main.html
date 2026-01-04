@@ -309,7 +309,7 @@ $(document).ready(function(){
 
       <!-- AVAILABILITY FILTERS -->
       <div class="filter-group">
-        <label>Availability</label>
+        <label>Others</label>
         <label class="checkbox">
           <input
             type="checkbox"
@@ -317,32 +317,19 @@ $(document).ready(function(){
             value="1"
             {% if open_source %}checked{% endif %}
           />
-          <span>Open-source (GitHub link)</span>
+            <span>Open-Source</span>
         </label>
+          <label class="checkbox">
+              <input
+                      type="checkbox"
+                      name="publication_status"
+                      value="presented"
+                      {% if 'presented' in publication_statuses %}checked{% endif %}
+              />
+              <span>Presented at conference</span>
+          </label>
       </div>
 
-      <!-- PUBLICATION FILTERS -->
-      <div class="filter-group">
-        <label>Publication</label>
-        <label class="checkbox">
-          <input
-            type="checkbox"
-            name="publication_status"
-            value="accepted"
-            {% if 'accepted' in publication_statuses %}checked{% endif %}
-          />
-          <span>Accepted at conference</span>
-        </label>
-        <label class="checkbox">
-          <input
-            type="checkbox"
-            name="publication_status"
-            value="presented"
-            {% if 'presented' in publication_statuses %}checked{% endif %}
-          />
-          <span>Presented at conference</span>
-        </label>
-      </div>
 
       <!-- SORT OPTIONS -->
       <div class="sort-options">
