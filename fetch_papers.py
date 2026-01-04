@@ -13,6 +13,7 @@ import urllib.request
 import feedparser
 from typing import Dict, Optional
 
+from repo_metadata import build_repo_metadata
 from utils import Config, safe_pickle_dump
 
 
@@ -115,6 +116,7 @@ def fetch_for_query(search_query: str, max_results: Optional[int], args, db) -> 
 
       # add to our database if we didn't have it before, or if this is a new version
       if not rawid in db or j['_version'] > db[rawid]['_version']:
+        j.update(build_repo_metadata(j))
         db[rawid] = j
         print('Updated %s added %s' % (j['updated'].encode('utf-8'), j['title'].encode('utf-8')))
         num_added += 1
@@ -190,4 +192,3 @@ if __name__ == "__main__":
   if num_added_total > 0:
     print('Saving database with %d papers to %s' % (len(db), Config.db_path))
     safe_pickle_dump(db, Config.db_path)
-
