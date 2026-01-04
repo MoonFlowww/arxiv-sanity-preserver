@@ -46,23 +46,11 @@
     <script>
 
         // passed in from flask as json
-        var tweets = {
-        {
-            tweets | tojson
-        }
-        }
+        var tweets = {{tweets | tojson }};
 
-        var papers = {
-        {
-            papers | tojson
-        }
-        }
+        var papers = {{ papers | tojson }};
 
-        var pid_to_users = {
-        {
-            pid_to_users | tojson
-        }
-        }
+        var pid_to_users = {{pid_to_users | tojson}};
 
         var msg = "{{ msg }}";
         var render_format = "{{ render_format }}";
