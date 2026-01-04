@@ -841,12 +841,16 @@ def _update_recompute_status(status: str, message: Optional[str] = None, error: 
         }
         state['status'] = status
         state['updated_at'] = int(time.time())
-        if message:
-            state['message'] = message
+        if status in {'idle', 'skipped', 'disabled'}:
+            state.pop('message', None)
+            state.pop('percent', None)
+        else:
+            if message:
+                state['message'] = message
+            if percent is not None:
+                state['percent'] = percent
         if error:
             state['error'] = error
-        if percent is not None:
-            state['percent'] = percent
         recompute_status['state'] = state
         _persist_recompute_status(state)
 

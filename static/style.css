@@ -411,26 +411,7 @@ h1 {
 }
 
 
-.ingest-badge {
-    display: inline-flex;
-    align-items: center;
-    margin-left: 0.4rem;
-    padding: 0.15rem 0.5rem;
-    border-radius: 999px;
-    background: rgba(34, 197, 94, 0.2);
-    color: #86efac;
-    font-size: 0.7rem;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-    opacity: 0;
-    transform: translateY(-2px);
-    transition: opacity 0.2s ease, transform 0.2s ease;
-}
 
-.ingest-badge.visible {
-    opacity: 1;
-    transform: translateY(0);
-}
 
 .ingest-form {
     display: flex;

@@ -159,34 +159,19 @@
             $('#recompute-status-panel').attr('aria-hidden', 'true').removeClass('visible');
         }
 
-        function updateRecomputeBadge(show) {
-            var badge = $('#cache-status-badge');
-            if (show) {
-                badge.addClass('visible');
-            } else {
-                badge.removeClass('visible');
-            }
-        }
 
         function updateRecomputeStatus(state) {
             var status = state.status || 'idle';
             recomputeLastStatus = status;
+            var isActive = status === 'running' || status === 'queued';
             var percent = typeof state.percent === 'number' ? state.percent : 0;
-            var message = state.message || 'Recomputing caches...';
+            var message = state.message || (status === 'queued' ? 'Recompute queued...' : 'Recomputing caches...');
 
-            if (status === 'running' || status === 'queued') {
-                updateRecomputeBadge(false);
+            if (isActive) {
                 showRecomputePanel(message, percent, 'info');
-            } else if (status === 'finished') {
-                hideRecomputePanel();
-                updateRecomputeBadge(true);
-            } else if (status === 'failed') {
-                updateRecomputeBadge(false);
-                var errorMessage = state.error ? ('Recompute failed: ' + state.error) : 'Recompute failed.';
-                showRecomputePanel(errorMessage, percent, 'error');
             } else {
                 hideRecomputePanel();
-                updateRecomputeBadge(false);
+                updateRecomputeBadge(status === 'finished');
             }
         }
 
@@ -303,7 +288,6 @@
                 ingestForm.on('submit', function (event) {
                     event.preventDefault();
                     showIngestOverlay();
-                    updateRecomputeBadge(false);
 
                     $.post('/ingest', ingestForm.serialize(), function (data) {
                         if (data.error) {
@@ -495,7 +479,7 @@
         </form>
 
         <div class="ingest-card">
-            <h3>Add a paper <span class="ingest-badge" id="cache-status-badge">Cache updated</span></h3>
+            <h3>Add Paper</h3>
             <form id="ingest-form" class="ingest-form" method="post" action="/ingest">
                 <div class="filter-group">
                     <label for="paper-id-input">arXiv identifier</label>
