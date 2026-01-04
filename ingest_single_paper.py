@@ -92,6 +92,17 @@ def _ensure_text(pdf_path: str, entry: dict) -> str:
     return txt_path
 
 
+class ThumbnailPolicyError(RuntimeError):
+    def __init__(self, message: str, thumb_path: str):
+        super().__init__(message)
+        self.thumb_path = thumb_path
+
+
+def _is_imagemagick_policy_denial(stderr_output: str) -> bool:
+    lowered = stderr_output.lower()
+    return "security policy" in lowered or "not allowed by the security policy 'pdf'" in lowered
+
+
 def _ensure_thumbnail(pdf_path: str) -> str:
     if not shutil.which("convert"):
         raise RuntimeError("ImageMagick's convert is required for thumbnails")
@@ -119,13 +130,30 @@ def _ensure_thumbnail(pdf_path: str) -> str:
             "-thumbnail",
             "x156",
             os.path.join(Config.tmp_dir, "thumb-%d.png"),
-        ]
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
     )
     try:
-        convert_proc.wait(timeout=20)
+        stdout_output, stderr_output = convert_proc.communicate(timeout=20)
     except subprocess.TimeoutExpired:
         convert_proc.terminate()
+        stdout_output, stderr_output = convert_proc.communicate()
         raise RuntimeError("Thumbnail generation timed out")
+
+    if convert_proc.returncode != 0 or _is_imagemagick_policy_denial(stderr_output):
+        policy_message = (
+            "ImageMagick PDF policy blocked conversion; update policy.xml to allow PDF or use an alternate renderer."
+        )
+        if _is_imagemagick_policy_denial(stderr_output):
+            missing_thumb_path = os.path.join("static", "missing.jpg")
+            shutil.copy(missing_thumb_path, thumb_path)
+            raise ThumbnailPolicyError(policy_message, thumb_path)
+        raise RuntimeError(
+            "Thumbnail generation failed with exit code %s.\nstdout: %s\nstderr: %s"
+            % (convert_proc.returncode, stdout_output.strip(), stderr_output.strip())
+        )
 
     first_thumb = os.path.join(Config.tmp_dir, "thumb-0.png")
     if not os.path.isfile(first_thumb):
@@ -157,9 +185,9 @@ def _recompute_caches():
 def ingest_paper(paper_id: str, progress_callback=None):
     """Ingest a paper and emit progress updates when a callback is provided."""
 
-    def emit(label: str, percent: int, message: Optional[str] = None):
+    def emit(label: str, percent: int, message: Optional[str] = None, warning: bool = False):
         if progress_callback:
-            progress_callback(label, percent, message)
+            progress_callback(label, percent, message, warning=warning)
 
     emit("Validating identifier...", 5)
     if not isvalidid(paper_id):
@@ -202,8 +230,9 @@ def ingest_paper(paper_id: str, progress_callback=None):
     emit("Generating thumbnail...", 70)
     try:
         thumb_path = _ensure_thumbnail(pdf_path)
-    except Exception as exc:
-        emit("Generating thumbnail...", 70, f"Thumbnail generation failed: {exc}")
+    except ThumbnailPolicyError as exc:
+        emit("Generating thumbnail...", 70, f"Thumbnail warning: {exc}", warning=True)
+        thumb_path = exc.thumb_path
         raise
 
     print(f"PDF stored at: {pdf_path}")
