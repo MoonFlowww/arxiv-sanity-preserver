@@ -623,6 +623,10 @@ def encode_json(ps, n=10, send_images=True, send_abstracts=True):
       else:
         struct['img'] = '/static/thumbs/' + thumb_fname
     struct['tags'] = [t['term'] for t in p['tags']]
+
+    # Repo metadata is computed during ingest/backfill to keep the API layer pure
+    struct['repo_links'] = p.get('repo_links') or []
+    struct['is_opensource'] = p.get('is_opensource', False)
     
     # render time information nicely
     timestruct = dateutil.parser.parse(p['updated'])
