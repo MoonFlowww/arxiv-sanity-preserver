@@ -816,17 +816,15 @@ def _load_ingest_job(job_id: str):
 def _run_ingest_job(job_id: str, paper_id: str):
     def emit(label: str, percent: int, message: Optional[str] = None, warning: bool = False):
         _update_ingest_job(job_id, label, percent, message, warning=warning)
-
-
-try:
-    emit('Starting ingest...', 1)
-    ingest_paper(paper_id, progress_callback=emit)
-    emit('Refreshing server data...', 95)
-    _refresh_serving_data()
-except Exception as e:
-    _update_ingest_job(job_id, 'Ingest failed', 100, str(e), done=True, error=True)
-else:
-    _update_ingest_job(job_id, 'Ingest complete', 100, done=True)
+    try:
+        emit('Starting ingest...', 1)
+        ingest_paper(paper_id, progress_callback=emit)
+        emit('Refreshing server data...', 95)
+        _refresh_serving_data()
+    except Exception as e:
+        _update_ingest_job(job_id, 'Ingest failed', 100, str(e), done=True, error=True)
+    else:
+        _update_ingest_job(job_id, 'Ingest complete', 100, done=True)
 
 
 @app.route('/ingest/status/<job_id>')
