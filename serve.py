@@ -41,6 +41,7 @@ limiter = Limiter(app, global_limits=["100 per hour", "20 per minute"])
 ingest_jobs = {}
 ingest_lock = threading.Lock()
 ingest_jobs_dir = Config.ingest_jobs_dir
+data_lock = threading.Lock()
 
 # topic browsing globals
 TOPIC_PIDS = {}
@@ -179,6 +180,67 @@ def translate_topic_name(topic_code):
   """Return a human-readable label for an arXiv topic identifier."""
 
   return TOPIC_TRANSLATIONS.get(topic_code, topic_code)
+
+
+def _build_topics(paper_db, date_sorted_pids):
+    topic_pids = {}
+    for pid in date_sorted_pids:
+        topic = paper_db[pid].get('arxiv_primary_category', {}).get('term')
+        if not topic:
+            continue
+        topic_pids.setdefault(topic, []).append(pid)
+    topics = sorted([
+        {
+            'name': topic,
+            'count': len(pids),
+            'display_name': translate_topic_name(topic),
+        } for topic, pids in topic_pids.items()
+    ], key=lambda x: x['display_name'])
+    return topic_pids, topics
+
+
+def _refresh_serving_data():
+    global db, vocab, idf, sim_dict, user_sim
+    global DATE_SORTED_PIDS, TOP_SORTED_PIDS, SEARCH_DICT
+    global TOPIC_PIDS, TOPICS
+
+    print('loading the paper database', Config.db_serve_path)
+    new_db = pickle.load(open(Config.db_serve_path, 'rb'))
+    ensure_impact_scores(new_db)
+
+    print('loading tfidf_meta', Config.meta_path)
+    meta = pickle.load(open(Config.meta_path, "rb"))
+    new_vocab = meta['vocab']
+    new_idf = meta['idf']
+
+    print('loading paper similarities', Config.sim_path)
+    new_sim_dict = pickle.load(open(Config.sim_path, "rb"))
+
+    print('loading user recommendations', Config.user_sim_path)
+    new_user_sim = {}
+    if os.path.isfile(Config.user_sim_path):
+        new_user_sim = pickle.load(open(Config.user_sim_path, 'rb'))
+
+    print('loading serve cache...', Config.serve_cache_path)
+    cache = pickle.load(open(Config.serve_cache_path, "rb"))
+    new_date_sorted_pids = cache['date_sorted_pids']
+    new_top_sorted_pids = sort_by_impact(new_db)
+    new_search_dict = cache['search_dict']
+
+    print('building topic index')
+    new_topic_pids, new_topics = _build_topics(new_db, new_date_sorted_pids)
+
+    with data_lock:
+        db = new_db
+        vocab = new_vocab
+        idf = new_idf
+        sim_dict = new_sim_dict
+        user_sim = new_user_sim
+        DATE_SORTED_PIDS = new_date_sorted_pids
+        TOP_SORTED_PIDS = new_top_sorted_pids
+        SEARCH_DICT = new_search_dict
+        TOPIC_PIDS = new_topic_pids
+        TOPICS = new_topics
 
 # -----------------------------------------------------------------------------
 # utilities for database interactions 
@@ -721,6 +783,8 @@ def _run_ingest_job(job_id: str, paper_id: str):
   try:
     emit('Starting ingest...', 1)
     ingest_paper(paper_id, progress_callback=emit)
+    emit('Refreshing server data...', 95)
+    _refresh_serving_data()
   except Exception as e:
     _update_ingest_job(job_id, 'Ingest failed', 100, str(e), done=True, error=True)
   else:
@@ -1206,43 +1270,7 @@ if __name__ == "__main__":
     print('this needs sqlite3 to be installed!')
     os.system('sqlite3 as.db < schema.sql')
 
-  print('loading the paper database', Config.db_serve_path)
-  db = pickle.load(open(Config.db_serve_path, 'rb'))
-
-  ensure_impact_scores(db)
-  
-  print('loading tfidf_meta', Config.meta_path)
-  meta = pickle.load(open(Config.meta_path, "rb"))
-  vocab = meta['vocab']
-  idf = meta['idf']
-
-  print('loading paper similarities', Config.sim_path)
-  sim_dict = pickle.load(open(Config.sim_path, "rb"))
-
-  print('loading user recommendations', Config.user_sim_path)
-  user_sim = {}
-  if os.path.isfile(Config.user_sim_path):
-    user_sim = pickle.load(open(Config.user_sim_path, 'rb'))
-  
-  print('loading serve cache...', Config.serve_cache_path)
-  cache = pickle.load(open(Config.serve_cache_path, "rb"))
-  DATE_SORTED_PIDS = cache['date_sorted_pids']
-  TOP_SORTED_PIDS = sort_by_impact(db)
-  SEARCH_DICT = cache['search_dict']
-
-  print('building topic index')
-  for pid in DATE_SORTED_PIDS:
-    topic = db[pid].get('arxiv_primary_category', {}).get('term')
-    if not topic:
-      continue
-    TOPIC_PIDS.setdefault(topic, []).append(pid)
-  TOPICS = sorted([
-    {
-      'name': topic,
-      'count': len(pids),
-      'display_name': translate_topic_name(topic),
-    } for topic, pids in TOPIC_PIDS.items()
-  ], key=lambda x: x['display_name'])
+  _refresh_serving_data()
 
   print('mongodb/tweets integration disabled (no MongoDB, or not needed)')
   client = None
