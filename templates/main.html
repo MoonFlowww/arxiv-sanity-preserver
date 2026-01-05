@@ -78,8 +78,8 @@
             var setLabel = function () {
                 var isDark = document.documentElement.classList.contains('dark-mode');
                 toggleButton.innerHTML = isDark
-                    ? '<span class="header-icon" aria-hidden="true">꥟</span>'
-                    : '<span class="header-icon" aria-hidden="true">🌙</span>';
+                    ? '<span class="theme-icon" aria-hidden="true">꥟</span>'
+                    : '<span class="theme-icon" aria-hidden="true">🌙</span>';
                 toggleButton.setAttribute('aria-pressed', isDark ? 'true' : 'false');
                 toggleButton.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
             };
@@ -89,130 +89,6 @@
                 var isDark = document.documentElement.classList.contains('dark-mode');
                 setStoredTheme(isDark ? 'dark' : 'light');
                 setLabel();
-            });
-        }
-        function initSettingsModal() {
-            var openButton = document.querySelector('.settings-toggle');
-            var overlay = document.getElementById('settings-overlay');
-            if (!openButton || !overlay) {
-                return;
-            }
-            var closeButton = overlay.querySelector('.settings-close');
-            var tabButtons = overlay.querySelectorAll('.settings-tab');
-            var panels = overlay.querySelectorAll('.settings-panel');
-            var dbContainer = overlay.querySelector('.settings-db-metadata');
-
-            function setActiveTab(tabName) {
-                Array.prototype.forEach.call(tabButtons, function (button) {
-                    var isActive = button.getAttribute('data-tab') === tabName;
-                    button.classList.toggle('is-active', isActive);
-                    button.setAttribute('aria-selected', isActive ? 'true' : 'false');
-                });
-                Array.prototype.forEach.call(panels, function (panel) {
-                    var isActive = panel.getAttribute('data-tab-panel') === tabName;
-                    panel.classList.toggle('is-active', isActive);
-                    panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
-                });
-            }
-
-            function formatPercent(value) {
-                if (typeof value === 'number') {
-                    return value.toFixed(1) + '%';
-                }
-                return '—';
-            }
-
-            function renderDbMetadata(data) {
-                if (!dbContainer) {
-                    return;
-                }
-                var dbItems = (data.available_dbs || []).map(function (entry) {
-                    var selected = entry.path === data.selected_db;
-                    var statusLabel = entry.exists ? 'Available' : 'Missing';
-                    return '<li>' +
-                        '<span class="settings-db-name">' + entry.label + '</span>' +
-                        '<span class="settings-db-status">' + statusLabel + '</span>' +
-                        (selected ? '<span class="settings-db-selected">Active</span>' : '') +
-                        '</li>';
-                }).join('');
-                var ranges = (data.category_ranges || []).map(function (range) {
-                    return '<li><span class="settings-range-label">' + range.label +
-                        '</span><span class="settings-range-value">' +
-                        range.earliest + ' → ' + range.latest + '</span></li>';
-                }).join('');
-
-                dbContainer.innerHTML = '' +
-                    '<div class="settings-db-grid">' +
-                    '<div class="settings-db-card">' +
-                    '<h4>Database overview</h4>' +
-                    '<dl>' +
-                    '<div><dt>Total papers</dt><dd>' + (data.total_papers || 0) + '</dd></div>' +
-                    '<div><dt>Papers downloaded</dt><dd>' + (data.downloaded_papers || 0) + ' (' +
-                    formatPercent(data.downloaded_percent) + ')</dd></div>' +
-                    '</dl>' +
-                    '</div>' +
-                    '<div class="settings-db-card">' +
-                    '<h4>Available databases</h4>' +
-                    '<ul class="settings-db-list">' + dbItems + '</ul>' +
-                    '</div>' +
-                    '</div>' +
-                    '<div class="settings-db-card">' +
-                    '<h4>Category date ranges</h4>' +
-                    '<ul class="settings-range-list">' + ranges + '</ul>' +
-                    '</div>';
-            }
-
-            function loadDbMetadata() {
-                if (!dbContainer) {
-                    return;
-                }
-                dbContainer.innerHTML = '<p class="settings-loading">Loading database metadata...</p>';
-                fetch('/settings/db_metadata')
-                    .then(function (response) { return response.json(); })
-                    .then(function (data) { renderDbMetadata(data); })
-                    .catch(function () {
-                        dbContainer.innerHTML = '<p class="settings-error">Unable to load database metadata.</p>';
-                    });
-            }
-
-            function openModal() {
-                overlay.classList.add('visible');
-                overlay.setAttribute('aria-hidden', 'false');
-                setActiveTab('general');
-                loadDbMetadata();
-            }
-
-            function closeModal() {
-                overlay.classList.remove('visible');
-                overlay.setAttribute('aria-hidden', 'true');
-            }
-
-            openButton.addEventListener('click', function () {
-                openModal();
-            });
-
-            if (closeButton) {
-                closeButton.addEventListener('click', function () {
-                    closeModal();
-                });
-            }
-
-            overlay.addEventListener('click', function (event) {
-                if (event.target === overlay) {
-                    closeModal();
-                }
-            });
-
-            document.addEventListener('keydown', function (event) {
-                if (event.key === 'Escape' && overlay.classList.contains('visible')) {
-                    closeModal();
-                }
-            });
-
-            Array.prototype.forEach.call(tabButtons, function (button) {
-                button.addEventListener('click', function () {
-                    setActiveTab(button.getAttribute('data-tab'));
-                });
             });
         }
     </script>
@@ -233,34 +109,12 @@
 
         var ingestPoller = null;
         var ingestLogIndex = 0;
-        var ingestJobId = null;
         var recomputePoller = null;
         var recomputeLastStatus = null;
         function resetIngestState() {
+            resetIngestState();
             $('#ingest-status-text').text('Preparing to start the ingest process...');
-            $('#ingest-progress-bar').css('width', '0%');
-            $('.ingest-progress').attr('aria-valuenow', 0);
-            $('#ingest-log').empty();
-            ingestLogIndex = 0;
-            updateIngestButtonProgress('Preparing to start the ingest process...', 0);
-        }
-
-        function updateIngestButtonProgress(label, percent) {
-            $('#ingest-button-label').text(label);
-            if (typeof percent !== 'number') {
-                percent = 0;
-            }
-            $('#ingest-button-progress').css('width', percent + '%');
-        }
-
-        function setIngestButtonBusy(isBusy) {
-            var button = $('.ingest-submit');
-            button.toggleClass('is-busy', isBusy);
-            button.attr('aria-busy', isBusy ? 'true' : 'false');
-            button.find('.btn-progress').attr('aria-hidden', isBusy ? 'false' : 'true');
-            if (!isBusy) {
-                updateIngestButtonProgress('Preparing to start the ingest process...', 0);
-            }
+            $('#ingest-close').attr('aria-hidden', 'true').removeClass('is-visible').off('click');
         }
 
         function updateIngestProgress(step) {
@@ -271,15 +125,19 @@
             status.text(step.label);
             bar.css('width', step.percent + '%');
             progressShell.attr('aria-valuenow', step.percent);
-            updateIngestButtonProgress(step.label, step.percent);
         }
 
         function showIngestOverlay() {
-            $('#ingest-overlay').attr('aria-hidden', 'false').addClass('visible');
-        }
+            var overlay = $('#ingest-overlay');
 
-        function hideIngestOverlay() {
-            $('#ingest-overlay').attr('aria-hidden', 'true').removeClass('visible');
+            if (ingestPoller) {
+                clearInterval(ingestPoller);
+            }
+            ingestLogIndex = 0;
+            updateIngestProgress({label: 'Preparing to start the ingest process...', percent: 0});
+            $('#ingest-log').empty();
+
+            overlay.attr('aria-hidden', 'false').addClass('visible');
         }
 
         function pollIngestStatus(jobId) {
@@ -299,17 +157,25 @@
                     if (data.done) {
                         clearInterval(ingestPoller);
                         ingestPoller = null;
-                        ingestJobId = null;
-                        setIngestButtonBusy(false);
                         if (data.error) {
                             $('#ingest-status-text').text('Ingest failed');
                         }
+                        $('#ingest-close')
+                            .attr('aria-hidden', 'false')
+                            .addClass('is-visible')
+                            .off('click')
+                            .on('click', function () {
+                                $('#ingest-overlay').attr('aria-hidden', 'true').removeClass('visible');
+                                if (ingestPoller) {
+                                    clearInterval(ingestPoller);
+                                    ingestPoller = null;
+                                }
+                                resetIngestState();
+                            });
                     }
                 }).fail(function () {
                     clearInterval(ingestPoller);
                     ingestPoller = null;
-                    ingestJobId = null;
-                    setIngestButtonBusy(false);
                 });
             }, 1000);
         }
@@ -318,15 +184,9 @@
             var text = $('#recompute-status-text');
             var progress = $('#recompute-status-percent');
             var levelClass = level ? 'recompute-' + level : '';
-            var percentText = '—';
 
             text.text(message);
-            if (typeof percent === 'number') {
-                percentText = percent + '%';
-            } else if (typeof percent === 'string' && percent.trim()) {
-                percentText = percent;
-            }
-            progress.text(percentText);
+            progress.text(percent + '%');
             panel.removeClass('recompute-error recompute-info recompute-success');
             if (levelClass) {
                 panel.addClass(levelClass);
@@ -338,37 +198,19 @@
             $('#recompute-status-panel').attr('aria-hidden', 'true').removeClass('visible');
         }
 
-        function getRecomputePercent(state) {
-            if (typeof state.percent === 'number') {
-                return state.percent;
-            }
-            if (typeof state.processed === 'number' && typeof state.total === 'number' && state.total > 0) {
-                return Math.round((state.processed / state.total) * 100);
-            }
-            return null;
-        }
 
         function updateRecomputeStatus(state) {
             var status = state.status || 'idle';
             recomputeLastStatus = status;
             var isActive = status === 'running' || status === 'queued';
-            var percent = getRecomputePercent(state);
+            var percent = typeof state.percent === 'number' ? state.percent : 0;
             var message = state.message || (status === 'queued' ? 'Recompute queued...' : 'Recomputing caches...');
 
             if (isActive) {
                 showRecomputePanel(message, percent, 'info');
             } else {
                 hideRecomputePanel();
-            }
-
-
-            if (!ingestJobId && !ingestPoller) {
-                if (isActive) {
-                    setIngestButtonBusy(true);
-                    updateIngestButtonProgress(message, percent);
-                } else {
-                    setIngestButtonBusy(false);
-                }
+                updateRecomputeBadge(status === 'finished');
             }
         }
 
@@ -484,41 +326,25 @@
             if (ingestForm.length) {
                 ingestForm.on('submit', function (event) {
                     event.preventDefault();
-                    if (ingestJobId && ingestPoller) {
-                        showIngestOverlay();
-                        return;
-                    }
-                    resetIngestState();
                     showIngestOverlay();
-                    setIngestButtonBusy(true);
 
                     $.post('/ingest', ingestForm.serialize(), function (data) {
                         if (data.error) {
                             $('#ingest-status-text').text(data.error);
-                            setIngestButtonBusy(false);
-                            ingestJobId = null;
                             return;
                         }
                         if (data.job_id) {
-                            ingestJobId = data.job_id;
-                            pollIngestStatus(ingestJobId);
+                            pollIngestStatus(data.job_id);
                         }
                     }, 'json').fail(function () {
                         $('#ingest-status-text').text('Could not start ingest. Please try again.');
-                        setIngestButtonBusy(false);
-                        ingestJobId = null;
                     });
                 });
             }
             startRecomputePolling();
+
             initLayoutToggle('.layout-btn');
             initThemeToggle();
-            initSettingsModal();
-            $('#ingest-overlay').on('click', function (event) {
-                if (event.target === this) {
-                    hideIngestOverlay();
-                }
-            });
         });
 
     </script>
@@ -530,12 +356,8 @@
 <div id="titdiv">
     <!-- Site information/banner -->
     <div class="header-actions">
-        <button type="button" class="icon-toggle settings-toggle" aria-label="Open settings" aria-haspopup="dialog"
-                aria-controls="settings-overlay">
-            <span class="header-icon" aria-hidden="true">⚙️</span>
-        </button>
-        <button type="button" class="icon-toggle theme-toggle" aria-label="Switch to dark mode" aria-pressed="false">
-            <span class="header-icon" aria-hidden="true">🌙</span>
+        <button type="button" class="theme-toggle" aria-label="Switch to dark mode" aria-pressed="false">
+            <span class="theme-icon" aria-hidden="true">🌙</span>
         </button>
     </div>
     <a href="/">
@@ -711,15 +533,7 @@
                     />
                 </div>
                 <p class="ingest-help">We will download the PDF, extract text, and refresh caches for the new paper.</p>
-                <button type="submit" class="btn-primary ingest-submit" aria-busy="false">
-                    <span class="btn-label">Add paper</span>
-                    <span class="btn-progress" aria-hidden="true">
-                        <span class="btn-progress-label" id="ingest-button-label">Preparing to start the ingest process...</span>
-                        <span class="btn-progress-track">
-                            <span class="btn-progress-bar" id="ingest-button-progress"></span>
-                        </span>
-                    </span>
-                </button>
+                <button type="submit" class="btn-primary">Add paper</button>
             </form>
             <div class="recompute-status-panel" id="recompute-status-panel" aria-hidden="true">
                 <div class="recompute-status-content">
@@ -774,58 +588,13 @@
     </main>
 </div>
 
-<div class="settings-overlay" id="settings-overlay" aria-hidden="true">
-    <div class="settings-modal" role="dialog" aria-labelledby="settings-modal-title"
-         aria-describedby="settings-modal-description">
-        <div class="settings-header">
-            <h3 id="settings-modal-title">Settings</h3>
-            <button type="button" class="settings-close" aria-label="Close settings">×</button>
-        </div>
-        <p id="settings-modal-description" class="settings-description">
-            Review application preferences, database status, and download rules.
-        </p>
-        <div class="settings-tabs" role="tablist">
-            <button type="button" class="settings-tab is-active" data-tab="general" role="tab" aria-selected="true">
-                General
-            </button>
-            <button type="button" class="settings-tab" data-tab="database" role="tab" aria-selected="false">
-                Database
-            </button>
-            <button type="button" class="settings-tab" data-tab="downloading" role="tab" aria-selected="false">
-                Downloading rules
-            </button>
-        </div>
-        <div class="settings-panel is-active" data-tab-panel="general" role="tabpanel" aria-hidden="false">
-            <div class="settings-panel-content">
-                <h4>General</h4>
-                <p>Use the theme toggle to switch between light and dark mode. Settings are stored locally in your
-                    browser.</p>
-            </div>
-        </div>
-        <div class="settings-panel" data-tab-panel="database" role="tabpanel" aria-hidden="true">
-            <div class="settings-panel-content settings-db-metadata">
-                <p class="settings-loading">Loading database metadata...</p>
-            </div>
-        </div>
-        <div class="settings-panel" data-tab-panel="downloading" role="tabpanel" aria-hidden="true">
-            <div class="settings-panel-content">
-                <h4>Downloading rules</h4>
-                <ul>
-                    <li>PDF downloads are stored in <code>data/pdf</code>.</li>
-                    <li>Recomputations are queued after new papers are ingested.</li>
-                    <li>Download scripts respect arXiv rate limits and include a user agent.</li>
-                </ul>
-            </div>
-        </div>
-    </div>
-</div>
-
 <div class="ingest-overlay" id="ingest-overlay" aria-hidden="true">
     <div class="ingest-modal" role="dialog" aria-labelledby="ingest-modal-title" aria-describedby="ingest-status-text">
         <h3 id="ingest-modal-title">Adding new paper</h3>
         <p class="ingest-status" id="ingest-status-text">Preparing to start the ingest process...</p>
-        <div class="ingest-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-            <div class="ingest-progress-bar" id="ingest-progress-bar" style="width: 0%;"></div>
+        <button type="button" class="btn-secondary ingest-close" id="ingest-close" aria-hidden="true">Close</button>
+        <div class="ingest-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="8">
+            <div class="ingest-progress-bar" id="ingest-progress-bar" style="width: 8%;"></div>
         </div>
         <div class="ingest-log" id="ingest-log" aria-live="polite"></div>
         <p class="ingest-note">We'll download the PDF, extract the text, and refresh caches. Feel free to keep this tab
