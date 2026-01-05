@@ -892,7 +892,7 @@ def _run_recompute_job():
                 _update_recompute_status(
                     'running',
                     message=f'Running {script_name}',
-                    percent=int((step_index / total_steps) * 100),
+                    percent=int(((step_index+0.1) / total_steps) * 100), #Move on bro
                 )
                 stdout_handle.write(f'[{time.ctime()}] Running {script_name}\n')
                 stderr_handle.write(f'[{time.ctime()}] Running {script_name}\n')

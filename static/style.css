@@ -14,6 +14,13 @@ html.dark-mode body {
     background: #0f172a;
     color: #e2e8f0;
 }
+html.dark-mode .ts a:link, html.dark-mode .ts a:visited {
+    color: #e2e8f0;
+}
+
+html.dark-mode .ts a:hover {
+    color: #f8fafc;
+}
 /* LEGACY CLASSES - kept for JavaScript compatibility */
 .as {
     font-size: 14px;
@@ -85,6 +92,10 @@ html.dark-mode body {
     padding: 10px;
     border-radius: 5px;
     text-align: justify;
+}
+html.dark-mode .tt {
+    color: #e2e8f0;
+    background-color: #111827;
 }
 
 .spid {
@@ -1294,7 +1305,14 @@ html.dark-mode ul.flashes li {
     font-weight: 600;
     color: #bfdbfe;
 }
+.ingest-close {
+    display: none;
+    margin-top: 0.75rem;
+}
 
+.ingest-close.is-visible {
+    display: inline-flex;
+}
 .ingest-progress {
     margin-top: 0.75rem;
     width: 100%;

@@ -111,6 +111,11 @@
         var ingestLogIndex = 0;
         var recomputePoller = null;
         var recomputeLastStatus = null;
+        function resetIngestState() {
+            resetIngestState();
+            $('#ingest-status-text').text('Preparing to start the ingest process...');
+            $('#ingest-close').attr('aria-hidden', 'true').removeClass('is-visible').off('click');
+        }
 
         function updateIngestProgress(step) {
             var status = $('#ingest-status-text');
@@ -155,6 +160,18 @@
                         if (data.error) {
                             $('#ingest-status-text').text('Ingest failed');
                         }
+                        $('#ingest-close')
+                            .attr('aria-hidden', 'false')
+                            .addClass('is-visible')
+                            .off('click')
+                            .on('click', function () {
+                                $('#ingest-overlay').attr('aria-hidden', 'true').removeClass('visible');
+                                if (ingestPoller) {
+                                    clearInterval(ingestPoller);
+                                    ingestPoller = null;
+                                }
+                                resetIngestState();
+                            });
                     }
                 }).fail(function () {
                     clearInterval(ingestPoller);
@@ -575,6 +592,7 @@
     <div class="ingest-modal" role="dialog" aria-labelledby="ingest-modal-title" aria-describedby="ingest-status-text">
         <h3 id="ingest-modal-title">Adding new paper</h3>
         <p class="ingest-status" id="ingest-status-text">Preparing to start the ingest process...</p>
+        <button type="button" class="btn-secondary ingest-close" id="ingest-close" aria-hidden="true">Close</button>
         <div class="ingest-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="8">
             <div class="ingest-progress-bar" id="ingest-progress-bar" style="width: 8%;"></div>
         </div>
