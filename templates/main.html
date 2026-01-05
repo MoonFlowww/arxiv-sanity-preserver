@@ -105,7 +105,11 @@
                 overlay.classList.add('visible');
                 overlay.setAttribute('aria-hidden', 'false');
                 if (tabButtons.length) {
-                    tabButtons[0].focus();
+                    try {
+                        tabButtons[0].focus({ preventScroll: true });
+                    } catch (error) {
+                        tabButtons[0].focus();
+                    }
                 }
             };
 
@@ -128,7 +132,10 @@
                 });
             };
 
-            openButton.addEventListener('click', showOverlay);
+            openButton.addEventListener('click', function (event) {
+                event.preventDefault();
+                showOverlay();
+            });
             closeButton.addEventListener('click', hideOverlay);
             overlay.addEventListener('click', function (event) {
                 if (event.target === overlay) {
