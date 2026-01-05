@@ -1330,6 +1330,10 @@ html.dark-mode ul.flashes li {
 /* SETTINGS MODAL */
 .settings-overlay {
     position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
     inset: 0;
     background: rgba(15, 23, 42, 0.6);
     display: none;
@@ -1589,6 +1593,10 @@ html.dark-mode .settings-error {
 /* INGEST MODAL */
 .ingest-overlay {
     position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
     inset: 0;
     background: rgba(15, 23, 42, 0.75);
     display: none;
