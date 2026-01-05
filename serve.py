@@ -1,7 +1,6 @@
 import argparse
 import dateutil.parser
 import json
-import logging
 import math
 import numpy as np
 import os
@@ -10,8 +9,6 @@ import subprocess
 import sys
 import pymongo
 import re
-import shutil
-import socket
 import threading
 import time
 import uuid
@@ -20,7 +17,7 @@ from hashlib import md5
 from random import shuffle, randrange, uniform
 from sqlite3 import dbapi2 as sqlite3
 from typing import Optional, Union
-from werkzeug.exceptions import HTTPException, InternalServerError
+
 from flask_limiter import Limiter
 from ingest_single_paper import ingest_paper
 from utils import strip_version, isvalidid, Config, open_atomic
@@ -41,23 +38,6 @@ app = Flask(__name__)
 app.config.from_object(__name__)
 limiter = Limiter(app, global_limits=["100 per hour", "20 per minute"])
 
-def configure_logging():
-    root_logger = logging.getLogger()
-    if not root_logger.handlers:
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(logging.Formatter(
-            '[%(asctime)s] %(levelname)s in %(module)s: %(message)s'
-        ))
-        root_logger.addHandler(handler)
-    root_logger.setLevel(logging.INFO)
-
-    app.logger.propagate = True
-    app.logger.setLevel(logging.INFO)
-
-
-configure_logging()
-
-
 ingest_jobs = {}
 ingest_lock = threading.Lock()
 ingest_jobs_dir = Config.ingest_jobs_dir
@@ -69,25 +49,6 @@ recompute_stdout_path = os.path.join(ingest_jobs_dir, 'recompute_stdout.log')
 recompute_stderr_path = os.path.join(ingest_jobs_dir, 'recompute_stderr.log')
 recompute_thread = None
 RECOMPUTE_STALE_SECONDS = 30 * 60
-APP_START_TIME = time.time()
-
-
-def _get_app_version():
-    env_version = os.environ.get('ARXIV_SANITY_VERSION')
-    if env_version:
-        return env_version
-    try:
-        return subprocess.check_output(
-            ['git', 'rev-parse', '--short', 'HEAD'],
-            cwd=os.path.dirname(os.path.abspath(__file__)),
-            stderr=subprocess.DEVNULL,
-            text=True,
-        ).strip()
-    except (OSError, subprocess.CalledProcessError):
-        return 'unknown'
-
-
-APP_VERSION = _get_app_version()
 
 # topic browsing globals
 TOPIC_PIDS = {}
@@ -290,7 +251,7 @@ def _refresh_serving_data():
 
 
 # -----------------------------------------------------------------------------
-# utilities for database interactions 
+# utilities for database interactions
 # -----------------------------------------------------------------------------
 # to initialize the database: sqlite3 as.db < schema.sql
 def connect_db():
@@ -345,11 +306,6 @@ def current_user_id():
 
 @app.before_request
 def before_request():
-    g.request_id = (
-            request.headers.get('X-Request-ID')
-            or request.headers.get('X-Correlation-ID')
-            or str(uuid.uuid4())
-    )
     # this will always request database connection, even if we dont end up using it ;\
     g.db = connect_db()
     # single-user mode: always ensure a default user is present
@@ -361,72 +317,6 @@ def teardown_request(exception):
     db = getattr(g, 'db', None)
     if db is not None:
         db.close()
-
-def _log_request_exception(error, status_code):
-    user = getattr(g, 'user', None)
-    user_id = user['user_id'] if user is not None else None
-    username = user['username'] if user is not None else None
-    request_id = getattr(g, 'request_id', None)
-    log_fn = app.logger.error if status_code >= 500 else app.logger.warning
-    log_fn(
-        "request_error status=%s method=%s path=%s user_id=%s username=%s request_id=%s error=%s",
-        status_code,
-        request.method,
-        request.path,
-        user_id,
-        username,
-        request_id,
-        error,
-    )
-
-
-@app.errorhandler(HTTPException)
-def handle_http_exception(error):
-    status_code = error.code or 500
-    _log_request_exception(error, status_code)
-    return error
-
-
-@app.errorhandler(Exception)
-def handle_unexpected_exception(error):
-    _log_request_exception(error, 500)
-    app.logger.exception("unhandled_exception request_id=%s", getattr(g, 'request_id', None))
-    return InternalServerError()
-
-def _truncate_text(value, max_length=2000):
-    if value is None:
-        return None
-    text = str(value)
-    if len(text) > max_length:
-        return text[:max_length] + '…'
-    return text
-
-
-@app.route('/log/client-error', methods=['POST'])
-def log_client_error():
-    payload = request.get_json(silent=True) or {}
-    if not isinstance(payload, dict):
-        payload = {}
-    message = _truncate_text(payload.get('message'), 1000)
-    stack = _truncate_text(payload.get('stack'), 4000)
-    url = _truncate_text(payload.get('url') or payload.get('page_url'), 1000)
-    line = payload.get('line')
-    column = payload.get('column')
-    user_agent = _truncate_text(payload.get('user_agent') or request.headers.get('User-Agent'), 500)
-    request_id = getattr(g, 'request_id', None)
-    app.logger.warning(
-        "client_error request_id=%s ip=%s message=%s url=%s line=%s column=%s user_agent=%s stack=%s",
-        request_id,
-        request.remote_addr,
-        message,
-        url,
-        line,
-        column,
-        user_agent,
-        stack,
-    )
-    return jsonify({"status": "ok"})
-
 
 
 # -----------------------------------------------------------------------------
@@ -966,179 +856,6 @@ def _get_recompute_status():
             _persist_recompute_status(status)
         return dict(status)
 
-def _parse_recompute_progress(log_path: str) -> Optional[dict]:
-    if not os.path.isfile(log_path):
-        return None
-    analyze_read_pattern = re.compile(r'(?:read|skipped) (\d+)/(\d+)')
-    analyze_batch_pattern = re.compile(r'(\d+)/(\d+)\.\.\.')
-    make_cache_progress_pattern = re.compile(r'^progress(?: [^ ]+)? (\d+)/(\d+)')
-    last_match = None
-    with open(log_path, 'r') as handle:
-        for line in handle:
-            match = analyze_read_pattern.search(line) or analyze_batch_pattern.search(line)
-            if not match:
-                match = make_cache_progress_pattern.search(line)
-            if match:
-                last_match = match
-    if not last_match:
-        return None
-    processed = int(last_match.group(1))
-    total = int(last_match.group(2))
-    percent = int(max(0, min(100, round((processed / total) * 100)))) if total > 0 else None
-    return {
-        'processed': processed,
-        'total': total,
-        'percent': percent,
-    }
-
-def _get_available_dbs():
-    available_dbs = []
-    for path in (Config.db_path, Config.db_serve_path):
-        available_dbs.append({
-            'path': path,
-            'label': os.path.basename(path),
-            'exists': os.path.isfile(path),
-        })
-    return available_dbs
-
-
-def _get_db_health():
-    with data_lock:
-        db_loaded = 'db' in globals() and isinstance(db, dict)
-        total_papers = len(db) if db_loaded else 0
-        date_sorted_count = len(DATE_SORTED_PIDS) if 'DATE_SORTED_PIDS' in globals() else None
-        top_sorted_count = len(TOP_SORTED_PIDS) if 'TOP_SORTED_PIDS' in globals() else None
-
-    db_serve_path_exists = os.path.isfile(Config.db_serve_path)
-    return {
-        'db_serve_path': Config.db_serve_path,
-        'db_serve_path_exists': db_serve_path_exists,
-        'loaded': db_loaded,
-        'load_success': db_loaded and db_serve_path_exists,
-        'available_dbs': _get_available_dbs(),
-        'record_counts': {
-            'papers': total_papers,
-            'date_sorted_pids': date_sorted_count,
-            'top_sorted_pids': top_sorted_count,
-        },
-    }
-
-
-def _run_command(cmd, timeout_seconds=1):
-    try:
-        completed = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-            check=True,
-        )
-    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        return None
-    return completed.stdout.strip()
-
-
-def _parse_ip_route_get(output):
-    if not output:
-        return {}
-    match = re.search(r'\bdev (?P<dev>\S+)', output)
-    src_match = re.search(r'\bsrc (?P<src>\S+)', output)
-    gateway_match = re.search(r'\bvia (?P<via>\S+)', output)
-    return {
-        'interface': match.group('dev') if match else None,
-        'ip': src_match.group('src') if src_match else None,
-        'gateway': gateway_match.group('via') if gateway_match else None,
-    }
-
-
-def _get_network_status(timeout_seconds=1):
-    status = {
-        'interface': None,
-        'ip': None,
-        'gateway': None,
-        'state': 'unknown',
-        'checks': {
-            'gateway_reachable': {'ok': None, 'error': None},
-            'dns_resolution': {'ok': None, 'error': None},
-            'external_ping': {'ok': None, 'error': None},
-        },
-    }
-
-    default_route = _run_command(['ip', 'route', 'show', 'default'], timeout_seconds=timeout_seconds)
-    if default_route:
-        match = re.search(r'default via (?P<gateway>\S+) dev (?P<dev>\S+)', default_route)
-        if match:
-            status['gateway'] = match.group('gateway')
-            status['interface'] = match.group('dev')
-
-    route_get = _run_command(['ip', 'route', 'get', '1.1.1.1'], timeout_seconds=timeout_seconds)
-    route_info = _parse_ip_route_get(route_get)
-    status['interface'] = status['interface'] or route_info.get('interface')
-    status['ip'] = status['ip'] or route_info.get('ip')
-    status['gateway'] = status['gateway'] or route_info.get('gateway')
-
-    if status['interface'] and not status['ip']:
-        addr_output = _run_command(
-            ['ip', '-o', '-4', 'addr', 'show', 'dev', status['interface']],
-            timeout_seconds=timeout_seconds,
-        )
-        if addr_output:
-            addr_match = re.search(r'\binet (?P<ip>\S+)', addr_output)
-            if addr_match:
-                status['ip'] = addr_match.group('ip').split('/')[0]
-
-    if shutil.which('ping') and status['gateway']:
-        try:
-            result = subprocess.run(
-                ['ping', '-c', '1', '-W', str(max(1, timeout_seconds)), status['gateway']],
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds,
-            )
-            status['checks']['gateway_reachable']['ok'] = result.returncode == 0
-            if result.returncode != 0:
-                status['checks']['gateway_reachable']['error'] = (result.stderr or result.stdout).strip() or None
-        except (OSError, subprocess.TimeoutExpired, PermissionError) as exc:
-            status['checks']['gateway_reachable']['ok'] = None
-            status['checks']['gateway_reachable']['error'] = str(exc)
-
-    old_timeout = socket.getdefaulttimeout()
-    try:
-        socket.setdefaulttimeout(timeout_seconds)
-        socket.getaddrinfo('example.com', 80)
-        status['checks']['dns_resolution']['ok'] = True
-    except OSError as exc:
-        status['checks']['dns_resolution']['ok'] = False
-        status['checks']['dns_resolution']['error'] = str(exc)
-    finally:
-        socket.setdefaulttimeout(old_timeout)
-
-    if shutil.which('ping'):
-        try:
-            result = subprocess.run(
-                ['ping', '-c', '1', '-W', str(max(1, timeout_seconds)), '1.1.1.1'],
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds,
-            )
-            status['checks']['external_ping']['ok'] = result.returncode == 0
-            if result.returncode != 0:
-                status['checks']['external_ping']['error'] = (result.stderr or result.stdout).strip() or None
-        except (OSError, subprocess.TimeoutExpired, PermissionError) as exc:
-            status['checks']['external_ping']['ok'] = None
-            status['checks']['external_ping']['error'] = str(exc)
-
-    check_values = [check['ok'] for check in status['checks'].values()]
-    if all(value is True for value in check_values if value is not None) and any(
-            value is True for value in check_values
-    ):
-        status['state'] = 'online'
-    elif any(value is False for value in check_values):
-        status['state'] = 'degraded' if any(value is True for value in check_values) else 'offline'
-    else:
-        status['state'] = 'unknown'
-
-    return status
 
 def _get_db_metadata():
     with data_lock:
@@ -1180,9 +897,16 @@ def _get_db_metadata():
 
     downloaded_percent = round((downloaded_papers / total_papers) * 100, 1) if total_papers else 0.0
 
+    available_dbs = []
+    for path in (Config.db_path, Config.db_serve_path):
+        available_dbs.append({
+            'path': path,
+            'label': os.path.basename(path),
+            'exists': os.path.isfile(path),
+        })
 
     return {
-        'available_dbs': _get_available_dbs(),
+        'available_dbs': available_dbs,
         'selected_db': Config.db_serve_path,
         'total_papers': total_papers,
         'downloaded_papers': downloaded_papers,
@@ -1372,13 +1096,6 @@ def ingest_recompute_status():
 @app.route('/recompute/status')
 def recompute_status_endpoint():
     status = _get_recompute_status()
-    progress = None
-    if status.get('status') in {'running', 'queued'}:
-        progress = _parse_recompute_progress(status.get('stdout_path', recompute_stdout_path))
-    if progress:
-        status['processed'] = progress.get('processed')
-        status['total'] = progress.get('total')
-        status['percent'] = progress.get('percent', status.get('percent'))
     return jsonify({
         'status': status.get('status'),
         'message': status.get('message'),
@@ -1388,22 +1105,6 @@ def recompute_status_endpoint():
         'updated_at': status.get('updated_at'),
         'error': status.get('error'),
     })
-
-@app.route('/status/health')
-def status_health():
-    return jsonify({
-        'db': _get_db_health(),
-        'network': _get_network_status(),
-        'site': {
-            'uptime_seconds': int(time.time() - APP_START_TIME),
-            'version': APP_VERSION,
-            'recompute_status': _get_recompute_status(),
-        },
-    })
-
-@app.route('/status/network')
-def status_network():
-    return jsonify(_get_network_status())
 
 @app.route('/settings/db_metadata')
 def settings_db_metadata():
