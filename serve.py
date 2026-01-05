@@ -16,7 +16,7 @@ from flask import Flask, request, url_for, redirect, render_template, abort, g, 
 from hashlib import md5
 from random import shuffle, randrange, uniform
 from sqlite3 import dbapi2 as sqlite3
-from typing import Optional
+from typing import Optional, Union
 
 from flask_limiter import Limiter
 from ingest_single_paper import ingest_paper
@@ -849,7 +849,7 @@ def _get_recompute_status():
         return dict(status)
 
 
-def _update_recompute_status(status: str, message: Optional[str] = None, error: Optional[str] = None, percent: Optional[int] = None):
+def _update_recompute_status(status: str, message: Optional[str] = None, error: Optional[str] = None, percent: Optional[Union[int, str]] = None):
     with recompute_lock:
         state = recompute_status.get('state') or _load_recompute_status() or {
             'status': 'idle',
@@ -877,7 +877,7 @@ def _update_recompute_status(status: str, message: Optional[str] = None, error: 
 def _run_recompute_job():
     global recompute_thread
     try:
-        _update_recompute_status('running', message='Recomputing caches', percent=0)
+        _update_recompute_status('running', message='Recomputing caches', percent='—')
         _ensure_ingest_jobs_dir()
         with open(recompute_stdout_path, 'a') as stdout_handle, open(recompute_stderr_path, 'a') as stderr_handle:
             stdout_handle.write(f'[{time.ctime()}] Starting recompute\n')
@@ -887,30 +887,59 @@ def _run_recompute_job():
                 ('buildsvm.py', False),
                 ('make_cache.py', True),
             ]
-            total_steps = len(steps)
-            for step_index, (script_name, required) in enumerate(steps):
+            for script_name, required in steps:
                 _update_recompute_status(
                     'running',
                     message=f'Running {script_name}',
-                    percent=int(((step_index+0.1) / total_steps) * 100), #Move on bro
+                    percent='—',
                 )
                 stdout_handle.write(f'[{time.ctime()}] Running {script_name}\n')
                 stderr_handle.write(f'[{time.ctime()}] Running {script_name}\n')
-                proc = subprocess.run(
-                    [sys.executable, script_name],
-                    check=required,
-                    stdout=stdout_handle,
-                    stderr=stderr_handle,
-                    text=True,
-                )
-                if proc.returncode != 0 and not required:
+                if script_name == 'make_cache.py':
+                    percent_pattern = re.compile(r'(\d{1,3})%')
+                    proc = subprocess.Popen(
+                        [sys.executable, script_name],
+                        stdout=subprocess.PIPE,
+                        stderr=stderr_handle,
+                        text=True,
+                        bufsize=1,
+                    )
+                    assert proc.stdout is not None
+                    for line in proc.stdout:
+                        stdout_handle.write(line)
+                        stdout_handle.flush()
+                        match = percent_pattern.search(line)
+                        if match:
+                            percent_value = int(match.group(1))
+                            if 0 <= percent_value <= 100:
+                                _update_recompute_status(
+                                    'running',
+                                    message=f'Running {script_name}',
+                                    percent=percent_value,
+                                )
+                    returncode = proc.wait()
+                else:
+                    proc = subprocess.run(
+                        [sys.executable, script_name],
+                        check=required,
+                        stdout=stdout_handle,
+                        stderr=stderr_handle,
+                        text=True,
+                    )
+                    returncode = proc.returncode
+                if returncode != 0:
+                    if required:
+                        raise subprocess.CalledProcessError(
+                            returncode,
+                            [sys.executable, script_name],
+                        )
                     stderr_handle.write(
-                        f'[{time.ctime()}] {script_name} exited with {proc.returncode}\n'
+                        f'[{time.ctime()}] {script_name} exited with {returncode}\n'
                     )
                 _update_recompute_status(
                     'running',
                     message=f'Finished {script_name}',
-                    percent=int(((step_index + 1) / total_steps) * 100),
+                    percent='—',
                 )
             stdout_handle.write(f'[{time.ctime()}] Recompute finished\n')
             stderr_handle.write(f'[{time.ctime()}] Recompute finished\n')
@@ -955,7 +984,7 @@ def _run_ingest_job(job_id: str, paper_id: str):
             emit('Recompute already running...', 90, 'Existing cache recompute is still running.')
         else:
             emit('Queued recompute...', 90, 'Cache recompute will run in the background.')
-            _update_recompute_status('queued', message='Recompute queued', percent=0)
+            _update_recompute_status('queued', message='Recompute queued', percent='—')
             with recompute_lock:
                 recompute_thread = threading.Thread(target=_run_recompute_job)
                 recompute_thread.daemon = True
