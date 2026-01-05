@@ -522,7 +522,6 @@
             initThemeToggle();
             initSettingsModal();
             initHealthPanel();
-            initStatusPopup();
             $('#ingest-overlay').on('click', function (event) {
                 if (event.target === this) {
                     hideIngestOverlay();
@@ -557,19 +556,13 @@
                 <div class="health-row" id="health-network-status">Loading...</div>
             </div>
             <div class="health-section">
+                <div class="health-section-title">System status</div>
+                <div class="health-row">All services are running normally.</div>
+            </div>
+            <div class="health-section">
                 <div class="health-section-title">Errors</div>
                 <ul class="health-errors" id="health-errors-list"></ul>
             </div>
-        </div>
-    </div>
-    <div class="status-control">
-        <button type="button" id="status-icon-button" class="status-icon-button" aria-label="Open status panel"
-                aria-haspopup="true" aria-expanded="false" aria-controls="status-popup">
-            <span class="status-icon" aria-hidden="true">ℹ️</span>
-        </button>
-        <div id="status-popup" class="status-popup" role="dialog" aria-hidden="true">
-            <p class="status-popup-title">System status</p>
-            <p class="status-popup-body">All services are running normally.</p>
         </div>
     </div>
     <div class="header-actions">
