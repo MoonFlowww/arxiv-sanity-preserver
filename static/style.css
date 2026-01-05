@@ -1332,6 +1332,11 @@ html.dark-mode ul.flashes li {
     display: flex;
 }
 
+#settings-overlay.visible {
+    display: flex;
+}
+
+
 .settings-modal {
     width: min(760px, 96vw);
     background: #ffffff;
