@@ -66,6 +66,17 @@ html.dark-mode .apaper .ts a:hover {
     color: #ffffff;
 }
 
+html.dark-mode .apaper .ts a {
+    color: #f8fafc;
+    background-color: transparent;
+}
+
+html.dark-mode .apaper .ts a:hover {
+    color: #ffffff;
+    background-color: transparent;
+}
+
+
 .cs a:link, .cs a:visited {
     text-decoration: none;
     color: #2563eb;
@@ -1340,6 +1351,14 @@ html.dark-mode ul.flashes li {
     border-radius: 0.9rem;
     border: 1px solid #e2e8f0;
     box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.settings-modal.visible {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 html.dark-mode .settings-modal {

@@ -856,6 +856,32 @@ def _get_recompute_status():
             _persist_recompute_status(status)
         return dict(status)
 
+def _parse_recompute_progress(log_path: str) -> Optional[dict]:
+    if not os.path.isfile(log_path):
+        return None
+    analyze_read_pattern = re.compile(r'(?:read|skipped) (\d+)/(\d+)')
+    analyze_batch_pattern = re.compile(r'(\d+)/(\d+)\.\.\.')
+    make_cache_progress_pattern = re.compile(r'^progress(?: [^ ]+)? (\d+)/(\d+)')
+    last_match = None
+    with open(log_path, 'r') as handle:
+        for line in handle:
+            match = analyze_read_pattern.search(line) or analyze_batch_pattern.search(line)
+            if not match:
+                match = make_cache_progress_pattern.search(line)
+            if match:
+                last_match = match
+    if not last_match:
+        return None
+    processed = int(last_match.group(1))
+    total = int(last_match.group(2))
+    percent = int(max(0, min(100, round((processed / total) * 100)))) if total > 0 else None
+    return {
+        'processed': processed,
+        'total': total,
+        'percent': percent,
+    }
+
+
 
 def _get_db_metadata():
     with data_lock:
@@ -1096,6 +1122,12 @@ def ingest_recompute_status():
 @app.route('/recompute/status')
 def recompute_status_endpoint():
     status = _get_recompute_status()
+    if status.get('status') in {'running', 'queued'}:
+        progress = _parse_recompute_progress(status.get('stdout_path', recompute_stdout_path))
+    if progress:
+        status['processed'] = progress.get('processed')
+        status['total'] = progress.get('total')
+        status['percent'] = progress.get('percent', status.get('percent'))
     return jsonify({
         'status': status.get('status'),
         'message': status.get('message'),

@@ -94,7 +94,8 @@
         function initSettingsModal() {
             var openButton = document.querySelector('.settings-toggle');
             var overlay = document.getElementById('settings-overlay');
-            if (!openButton || !overlay) {
+            var modal = document.getElementById('settings-modal');
+            if (!openButton || !overlay || !modal) {
                 return;
             }
             var closeButton = overlay.querySelector('.settings-close');
@@ -177,6 +178,7 @@
 
             function openModal() {
                 overlay.classList.add('visible');
+                modal.classList.add('visible');
                 overlay.setAttribute('aria-hidden', 'false');
                 setActiveTab('general');
                 loadDbMetadata();
@@ -184,6 +186,7 @@
 
             function closeModal() {
                 overlay.classList.remove('visible');
+                modal.classList.remove('visible');
                 overlay.setAttribute('aria-hidden', 'true');
             }
 
@@ -354,6 +357,7 @@
             var isActive = status === 'running' || status === 'queued';
             var percent = getRecomputePercent(state);
             var message = state.message || (status === 'queued' ? 'Recompute queued...' : 'Recomputing caches...');
+            var percentValue = typeof percent === 'number' ? percent : 0;
 
             if (isActive) {
                 showRecomputePanel(message, percent, 'info');
@@ -366,7 +370,7 @@
             if (!ingestJobId && !ingestPoller) {
                 if (isActive) {
                     setIngestButtonBusy(true);
-                    updateIngestButtonProgress(message, percent);
+                    updateIngestButtonProgress(percentValue + '%', percentValue);
                 } else {
                     setIngestButtonBusy(false);
                 }
@@ -515,6 +519,7 @@
 
             initLayoutToggle('.layout-btn');
             initThemeToggle();
+            initSettingsModal();
             $('#ingest-overlay').on('click', function (event) {
                 if (event.target === this) {
                     hideIngestOverlay();
@@ -776,7 +781,7 @@
 </div>
 
 <div class="settings-overlay" id="settings-overlay" aria-hidden="true">
-    <div class="settings-modal" role="dialog" aria-labelledby="settings-modal-title"
+    <div class="settings-modal" id="settings-modal" role="dialog" aria-labelledby="settings-modal-title"
          aria-describedby="settings-modal-description">
         <div class="settings-header">
             <h3 id="settings-modal-title">Settings</h3>
