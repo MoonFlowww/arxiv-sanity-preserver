@@ -49,6 +49,25 @@ recompute_stdout_path = os.path.join(ingest_jobs_dir, 'recompute_stdout.log')
 recompute_stderr_path = os.path.join(ingest_jobs_dir, 'recompute_stderr.log')
 recompute_thread = None
 RECOMPUTE_STALE_SECONDS = 30 * 60
+APP_START_TIME = time.time()
+
+
+def _get_app_version():
+    env_version = os.environ.get('ARXIV_SANITY_VERSION')
+    if env_version:
+        return env_version
+    try:
+        return subprocess.check_output(
+            ['git', 'rev-parse', '--short', 'HEAD'],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return 'unknown'
+
+
+APP_VERSION = _get_app_version()
 
 # topic browsing globals
 TOPIC_PIDS = {}
@@ -881,6 +900,37 @@ def _parse_recompute_progress(log_path: str) -> Optional[dict]:
         'percent': percent,
     }
 
+def _get_available_dbs():
+    available_dbs = []
+    for path in (Config.db_path, Config.db_serve_path):
+        available_dbs.append({
+            'path': path,
+            'label': os.path.basename(path),
+            'exists': os.path.isfile(path),
+        })
+    return available_dbs
+
+
+def _get_db_health():
+    with data_lock:
+        db_loaded = 'db' in globals() and isinstance(db, dict)
+        total_papers = len(db) if db_loaded else 0
+        date_sorted_count = len(DATE_SORTED_PIDS) if 'DATE_SORTED_PIDS' in globals() else None
+        top_sorted_count = len(TOP_SORTED_PIDS) if 'TOP_SORTED_PIDS' in globals() else None
+
+    db_serve_path_exists = os.path.isfile(Config.db_serve_path)
+    return {
+        'db_serve_path': Config.db_serve_path,
+        'db_serve_path_exists': db_serve_path_exists,
+        'loaded': db_loaded,
+        'load_success': db_loaded and db_serve_path_exists,
+        'available_dbs': _get_available_dbs(),
+        'record_counts': {
+            'papers': total_papers,
+            'date_sorted_pids': date_sorted_count,
+            'top_sorted_pids': top_sorted_count,
+        },
+    }
 
 
 def _get_db_metadata():
@@ -923,16 +973,9 @@ def _get_db_metadata():
 
     downloaded_percent = round((downloaded_papers / total_papers) * 100, 1) if total_papers else 0.0
 
-    available_dbs = []
-    for path in (Config.db_path, Config.db_serve_path):
-        available_dbs.append({
-            'path': path,
-            'label': os.path.basename(path),
-            'exists': os.path.isfile(path),
-        })
 
     return {
-        'available_dbs': available_dbs,
+        'available_dbs': _get_available_dbs(),
         'selected_db': Config.db_serve_path,
         'total_papers': total_papers,
         'downloaded_papers': downloaded_papers,
@@ -1139,6 +1182,16 @@ def recompute_status_endpoint():
         'error': status.get('error'),
     })
 
+@app.route('/status/health')
+def status_health():
+    return jsonify({
+        'db': _get_db_health(),
+        'site': {
+            'uptime_seconds': int(time.time() - APP_START_TIME),
+            'version': APP_VERSION,
+            'recompute_status': _get_recompute_status(),
+        },
+    })
 @app.route('/settings/db_metadata')
 def settings_db_metadata():
     return jsonify(_get_db_metadata())
