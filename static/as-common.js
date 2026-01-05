@@ -86,6 +86,158 @@ function updateRecomputeBadge(isFinished) {
     badge.attr('aria-hidden', finished ? 'true' : 'false');
 }
 
+function initHealthPanel() {
+    var button = $('#health-state-button');
+    var panel = $('#health-state-panel');
+    if (!button.length || !panel.length) {
+        return;
+    }
+
+    function setPanelVisible(visible) {
+        panel.attr('aria-hidden', visible ? 'false' : 'true');
+        panel.toggleClass('visible', visible);
+        button.attr('aria-expanded', visible ? 'true' : 'false');
+    }
+
+    button.on('click', function (event) {
+        event.stopPropagation();
+        var isVisible = panel.hasClass('visible');
+        setPanelVisible(!isVisible);
+    });
+
+    $(document).on('click', function (event) {
+        if (!panel.has(event.target).length && event.target !== button[0]) {
+            setPanelVisible(false);
+        }
+    });
+
+    function formatUptime(seconds) {
+        if (typeof seconds !== 'number') {
+            return 'Unknown';
+        }
+        var minutes = Math.floor(seconds / 60);
+        var hours = Math.floor(minutes / 60);
+        var days = Math.floor(hours / 24);
+        if (days > 0) {
+            return days + 'd ' + (hours % 24) + 'h';
+        }
+        if (hours > 0) {
+            return hours + 'h ' + (minutes % 60) + 'm';
+        }
+        return minutes + 'm';
+    }
+
+    function renderErrors(errors) {
+        var list = $('#health-errors-list');
+        list.empty();
+        if (!errors || !errors.length) {
+            list.append('<li class="health-empty">No errors reported.</li>');
+            return;
+        }
+        errors.slice(0, 50).forEach(function (entry) {
+            var label = entry.source ? entry.source.toUpperCase() : 'ERROR';
+            var message = entry.message || 'Unknown error';
+            var timestamp = entry.timestamp ? new Date(entry.timestamp * 1000).toLocaleString() : '';
+            var item = $('<li></li>');
+            item.append('<span class="health-error-source">' + label + '</span>');
+            item.append('<span class="health-error-message">' + message + '</span>');
+            if (timestamp) {
+                item.append('<span class="health-error-time">' + timestamp + '</span>');
+            }
+            list.append(item);
+        });
+    }
+
+    function updateHealthPanel(data) {
+        var db = data.database || {};
+        var dbStatus = 'DB: ' + (db.selected_db || 'Unknown');
+        if (typeof db.total_papers === 'number') {
+            dbStatus += ' • Papers: ' + db.total_papers;
+        }
+        if (typeof db.downloaded_percent === 'number') {
+            dbStatus += ' • PDFs: ' + db.downloaded_percent + '%';
+        }
+        $('#health-db-status').text(dbStatus);
+
+        var site = data.site || {};
+        var siteStatus = 'Uptime: ' + formatUptime(site.uptime_seconds);
+        if (site.recompute_status) {
+            siteStatus += ' • Recompute: ' + site.recompute_status;
+        }
+        if (site.recompute_message) {
+            siteStatus += ' • ' + site.recompute_message;
+        }
+        $('#health-site-status').text(siteStatus);
+
+        var network = data.network || {};
+        var networkStatus = network.reachable ? 'Online' : 'Offline';
+        if (network.ip) {
+            networkStatus += ' • IP: ' + network.ip;
+        }
+        if (network.error) {
+            networkStatus += ' • ' + network.error;
+        }
+        $('#health-network-status').text(networkStatus);
+    }
+
+    function fetchHealth() {
+        $.getJSON('/status/health', function (data) {
+            updateHealthPanel(data);
+        });
+        $.getJSON('/status/errors', function (data) {
+            renderErrors(data.errors);
+        });
+    }
+
+    fetchHealth();
+    setInterval(fetchHealth, 5000);
+}
+
+function reportClientError(message, context) {
+    if (!message) {
+        return;
+    }
+    try {
+        $.ajax({
+            url: '/status/report_error',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                source: 'client',
+                message: message,
+                context: context || {},
+            }),
+        });
+    } catch (e) {
+    }
+}
+
+window.addEventListener('error', function (event) {
+    var message = event.message || 'Unknown client error';
+    reportClientError(message, {
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+    });
+});
+
+window.addEventListener('unhandledrejection', function (event) {
+    var message = event.reason ? event.reason.toString() : 'Unhandled promise rejection';
+    reportClientError(message, {});
+});
+
+
+function updateRecomputeBadge(isFinished) {
+    var badge = $('#recompute-badge');
+    if (!badge.length) {
+        return;
+    }
+
+    var finished = Boolean(isFinished);
+    badge.toggleClass('recompute-badge-finished', finished);
+    badge.attr('aria-hidden', finished ? 'true' : 'false');
+}
+
 function initStatusPopup() {
     var button = document.getElementById('status-icon-button');
     var popup = document.getElementById('status-popup');

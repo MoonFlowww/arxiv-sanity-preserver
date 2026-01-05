@@ -521,6 +521,7 @@
             initLayoutToggle('.layout-btn');
             initThemeToggle();
             initSettingsModal();
+            initHealthPanel();
             initStatusPopup();
             $('#ingest-overlay').on('click', function (event) {
                 if (event.target === this) {
@@ -537,6 +538,30 @@
 <!-- HEADER -->
 <div id="titdiv">
     <!-- Site information/banner -->
+    <div class="header-health">
+        <button type="button" class="health-toggle" id="health-state-button" aria-label="Open health state"
+                aria-haspopup="true" aria-expanded="false" aria-controls="health-state-panel">
+            <span aria-hidden="true">📶</span>
+        </button>
+        <div class="health-panel" id="health-state-panel" aria-hidden="true">
+            <div class="health-section">
+                <div class="health-section-title">Database</div>
+                <div class="health-row" id="health-db-status">Loading...</div>
+            </div>
+            <div class="health-section">
+                <div class="health-section-title">Site Health</div>
+                <div class="health-row" id="health-site-status">Loading...</div>
+            </div>
+            <div class="health-section">
+                <div class="health-section-title">Network</div>
+                <div class="health-row" id="health-network-status">Loading...</div>
+            </div>
+            <div class="health-section">
+                <div class="health-section-title">Errors</div>
+                <ul class="health-errors" id="health-errors-list"></ul>
+            </div>
+        </div>
+    </div>
     <div class="status-control">
         <button type="button" id="status-icon-button" class="status-icon-button" aria-label="Open status panel"
                 aria-haspopup="true" aria-expanded="false" aria-controls="status-popup">
