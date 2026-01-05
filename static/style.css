@@ -16,14 +16,11 @@ html.dark-mode body {
 }
 
 /* LEGACY CLASSES - kept for JavaScript compatibility */
-.as {
-    font-size: 14px;
-    color: #2563eb;
-}
 
+.as,
 .cs {
-    color: #2563eb;
     font-size: 14px;
+    color: #2563eb;
 }
 
 .ts {
@@ -31,7 +28,10 @@ html.dark-mode body {
     font-size: 16px;
 }
 
-.as a:link, .as a:visited {
+.as a:link,
+.as a:visited,
+.cs a:link,
+.cs a:visited {
     text-decoration: none;
     color: #2563eb;
 }
@@ -64,11 +64,6 @@ html.dark-mode .apaper .ts a:link, html.dark-mode .apaper .ts a:visited {
 
 html.dark-mode .apaper .ts a:hover {
     color: #ffffff;
-}
-
-.cs a:link, .cs a:visited {
-    text-decoration: none;
-    color: #2563eb;
 }
 
 .cs a:hover {
@@ -158,7 +153,7 @@ h1 {
     z-index: 2;
 }
 
-.theme-toggle {
+.icon-toggle {
     border: 1px solid #374151;
     background: transparent;
     color: #f9fafb;
@@ -174,39 +169,11 @@ h1 {
     min-height: 2.1rem;
 }
 
-.settings-toggle {
-    border: 1px solid #374151;
-    background: transparent;
-    color: #f9fafb;
-    padding: 0.35rem;
-    border-radius: 0.4rem;
-    font-size: 14px;
-    cursor: pointer;
-    transition: background 0.2s;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 2.1rem;
-    min-height: 2.1rem;
-}
-
-.theme-toggle:hover {
+.icon-toggle:hover {
     background: #1f2937;
 }
 
-.settings-toggle:hover {
-    background: #1f2937;
-}
-
-.theme-icon {
-    font-size: 1rem;
-    line-height: 1;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.settings-icon {
+.header-icon {
     font-size: 1rem;
     line-height: 1;
     display: inline-flex;
@@ -1332,9 +1299,6 @@ html.dark-mode ul.flashes li {
     display: flex;
 }
 
-#settings-overlay.visible {
-    display: flex;
-}
 
 
 .settings-modal {
@@ -1436,9 +1400,6 @@ html.dark-mode .settings-tab.is-active {
 
 .settings-panel-content h4 {
     margin: 0 0 0.5rem 0;
-}
-#settings-overlay.visible {
-    display: flex;
 }
 .settings-panel-content ul {
     margin: 0;

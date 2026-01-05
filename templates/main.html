@@ -78,8 +78,8 @@
             var setLabel = function () {
                 var isDark = document.documentElement.classList.contains('dark-mode');
                 toggleButton.innerHTML = isDark
-                    ? '<span class="theme-icon" aria-hidden="true">꥟</span>'
-                    : '<span class="theme-icon" aria-hidden="true">🌙</span>';
+                    ? '<span class="header-icon" aria-hidden="true">꥟</span>'
+                    : '<span class="header-icon" aria-hidden="true">🌙</span>';
                 toggleButton.setAttribute('aria-pressed', isDark ? 'true' : 'false');
                 toggleButton.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
             };
@@ -530,12 +530,12 @@
 <div id="titdiv">
     <!-- Site information/banner -->
     <div class="header-actions">
-        <button type="button" class="settings-toggle" aria-label="Open settings" aria-haspopup="dialog"
+        <button type="button" class="icon-toggle settings-toggle" aria-label="Open settings" aria-haspopup="dialog"
                 aria-controls="settings-overlay">
-            <span class="settings-icon" aria-hidden="true">⚙️</span>
+            <span class="header-icon" aria-hidden="true">⚙️</span>
         </button>
-        <button type="button" class="theme-toggle" aria-label="Switch to dark mode" aria-pressed="false">
-            <span class="theme-icon" aria-hidden="true">🌙</span>
+        <button type="button" class="icon-toggle theme-toggle" aria-label="Switch to dark mode" aria-pressed="false">
+            <span class="header-icon" aria-hidden="true">🌙</span>
         </button>
     </div>
     <a href="/">
