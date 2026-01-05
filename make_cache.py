@@ -25,6 +25,7 @@ CACHE = {}
 
 print('loading the paper database', Config.db_path)
 db = pickle.load(open(Config.db_path, 'rb'))
+total_papers = len(db)
 
 print('loading tfidf_meta', Config.meta_path)
 meta = pickle.load(open(Config.meta_path, "rb"))
@@ -57,7 +58,9 @@ def fetch_citation_count(arxiv_id):
 
 print('decorating the database with additional information...')
 seconds_per_year = 365.25 * 24 * 60 * 60
-
+def log_progress(label, index, total, stride=50):
+    if index == total or index % stride == 0:
+        print('progress %s %d/%d' % (label, index, total))
 
 def ensure_time_metadata(paper):
     if 'time_updated' not in paper:
@@ -78,37 +81,39 @@ def compute_impact_score(paper, now_ts=None, alpha=0.3):
     paper['years_since_pub'] = years_since_pub
 
 
-for pid, p in db.items():
+for index, (pid, p) in enumerate(db.items(), start=1):
     ensure_time_metadata(p)
+    log_progress('metadata', index, total_papers)
 
 print('fetching citation counts from OpenAlex (if missing)...')
 updated_citations = 0
-for pid, p in db.items():
-    if p.get('citation_count') is not None:
-        continue
+for index, (pid, p) in enumerate(db.items(), start=1):
+    if p.get('citation_count') is None:
+        count = fetch_citation_count(pid)
+        if count is None:
+            count = 0
+        else:
+            updated_citations += 1
 
-    count = fetch_citation_count(pid)
-    if count is None:
-        count = 0
-    else:
-        updated_citations += 1
-
-    p['citation_count'] = count
-    time.sleep(0.1)  # be kind to OpenAlex API
+        p['citation_count'] = count
+        time.sleep(0.1)  # be kind to OpenAlex API
+    log_progress('citations', index, total_papers)
 print('Updated citation counts for %d papers.' % updated_citations)
 
 print('computing OpenAlex-inspired recency-aware scores...')
 now_ts = time.time()
-for pid, p in db.items():
+for index, (pid, p) in enumerate(db.items(), start=1):
     compute_impact_score(p, now_ts=now_ts)
+    log_progress('impact', index, total_papers)
 
 print('computing min/max time for all papers...')
 tts = [time.mktime(dateutil.parser.parse(p['updated']).timetuple()) for pid, p in db.items()]
 ttmin = min(tts) * 1.0
 ttmax = max(tts) * 1.0
-for pid, p in db.items():
+for index, (pid, p) in enumerate(db.items(), start=1):
     tt = time.mktime(dateutil.parser.parse(p['updated']).timetuple())
     p['tscore'] = (tt - ttmin) / (ttmax - ttmin)
+    log_progress('time', index, total_papers)
 
 print('precomputing papers date sorted...')
 scores = [(p['time_updated'], pid) for pid, p in db.items()]
@@ -164,7 +169,7 @@ def merge_dicts(dlist):
 
 print('building an index for faster search...')
 search_dict = {}
-for pid, p in db.items():
+for index, (pid, p) in enumerate(db.items(), start=1):
     dict_title = makedict(p['title'], forceidf=5, scale=3)
     dict_authors = makedict(' '.join(x['name'] for x in p['authors']), forceidf=5)
     dict_categories = {x['term'].lower(): 5 for x in p['tags']}
@@ -173,6 +178,7 @@ for pid, p in db.items():
         del dict_authors['and']
     dict_summary = makedict(p['summary'])
     search_dict[pid] = merge_dicts([dict_title, dict_authors, dict_categories, dict_summary])
+    log_progress('search', index, total_papers)
 CACHE['search_dict'] = search_dict
 
 # save the cache

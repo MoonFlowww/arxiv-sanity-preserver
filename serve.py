@@ -841,7 +841,15 @@ def _get_recompute_status():
                 status['updated_at'] = now
                 status.pop('message', None)
                 status.pop('percent', None)
+                status.pop('processed', None)
+                status.pop('total', None)
                 status.pop('error', None)
+                dirty = True
+        if status.get('percent') is None:
+            processed = status.get('processed')
+            total = status.get('total')
+            if isinstance(processed, int) and isinstance(total, int) and total > 0:
+                status['percent'] = int(max(0, min(100, round((processed / total) * 100))))
                 dirty = True
         if dirty:
             recompute_status['state'] = status
@@ -849,7 +857,65 @@ def _get_recompute_status():
         return dict(status)
 
 
-def _update_recompute_status(status: str, message: Optional[str] = None, error: Optional[str] = None, percent: Optional[Union[int, str]] = None):
+def _get_db_metadata():
+    with data_lock:
+        paper_values = list(db.values())
+
+    total_papers = len(paper_values)
+    ranges = {}
+    for paper in paper_values:
+        category = paper.get('arxiv_primary_category', {}).get('term') or 'unknown'
+        date_str = paper.get('published') or paper.get('updated')
+        if not date_str:
+            continue
+        try:
+            parsed_date = dateutil.parser.parse(date_str).date()
+        except (ValueError, TypeError):
+            continue
+        entry = ranges.setdefault(category, {'earliest': parsed_date, 'latest': parsed_date})
+        if parsed_date < entry['earliest']:
+            entry['earliest'] = parsed_date
+        if parsed_date > entry['latest']:
+            entry['latest'] = parsed_date
+
+    category_ranges = [
+        {
+            'category': category,
+            'label': translate_topic_name(category),
+            'earliest': entry['earliest'].isoformat(),
+            'latest': entry['latest'].isoformat(),
+        }
+        for category, entry in ranges.items()
+    ]
+    category_ranges.sort(key=lambda item: item['label'])
+
+    if os.path.isdir(Config.pdf_dir):
+        pdf_files = [name for name in os.listdir(Config.pdf_dir) if name.lower().endswith('.pdf')]
+        downloaded_papers = len(pdf_files)
+    else:
+        downloaded_papers = 0
+
+    downloaded_percent = round((downloaded_papers / total_papers) * 100, 1) if total_papers else 0.0
+
+    available_dbs = []
+    for path in (Config.db_path, Config.db_serve_path):
+        available_dbs.append({
+            'path': path,
+            'label': os.path.basename(path),
+            'exists': os.path.isfile(path),
+        })
+
+    return {
+        'available_dbs': available_dbs,
+        'selected_db': Config.db_serve_path,
+        'total_papers': total_papers,
+        'downloaded_papers': downloaded_papers,
+        'downloaded_percent': downloaded_percent,
+        'category_ranges': category_ranges,
+    }
+
+
+def _update_recompute_status(status: str, message: Optional[str] = None, error: Optional[str] = None, percent: Optional[Union[int, str]] = None, processed: Optional[int] = None, total: Optional[int] = None, clear_progress: bool = False):
     with recompute_lock:
         state = recompute_status.get('state') or _load_recompute_status() or {
             'status': 'idle',
@@ -863,9 +929,21 @@ def _update_recompute_status(status: str, message: Optional[str] = None, error: 
         if status in {'idle', 'skipped', 'disabled'}:
             state.pop('message', None)
             state.pop('percent', None)
+            state.pop('processed', None)
+            state.pop('total', None)
         else:
             if message:
                 state['message'] = message
+            if clear_progress:
+                state.pop('processed', None)
+                state.pop('total', None)
+                state.pop('percent', None)
+            if processed is not None:
+                state['processed'] = processed
+            if total is not None:
+                state['total'] = total
+            if percent is None and processed is not None and total:
+                percent = int(max(0, min(100, round((processed / total) * 100))))
             if percent is not None:
                 state['percent'] = percent
         if error:
@@ -877,11 +955,14 @@ def _update_recompute_status(status: str, message: Optional[str] = None, error: 
 def _run_recompute_job():
     global recompute_thread
     try:
-        _update_recompute_status('running', message='Recomputing caches', percent='—')
+        _update_recompute_status('running', message='Recomputing caches', percent=None, clear_progress=True)
         _ensure_ingest_jobs_dir()
         with open(recompute_stdout_path, 'a') as stdout_handle, open(recompute_stderr_path, 'a') as stderr_handle:
             stdout_handle.write(f'[{time.ctime()}] Starting recompute\n')
             stderr_handle.write(f'[{time.ctime()}] Starting recompute\n')
+            analyze_read_pattern = re.compile(r'(?:read|skipped) (\d+)/(\d+)')
+            analyze_batch_pattern = re.compile(r'(\d+)/(\d+)\.\.\.')
+            make_cache_progress_pattern = re.compile(r'^progress(?: [^ ]+)? (\d+)/(\d+)')
             steps = [
                 ('analyze.py', True),
                 ('buildsvm.py', False),
@@ -891,12 +972,12 @@ def _run_recompute_job():
                 _update_recompute_status(
                     'running',
                     message=f'Running {script_name}',
-                    percent='—',
+                    percent=None,
+                    clear_progress=True,
                 )
                 stdout_handle.write(f'[{time.ctime()}] Running {script_name}\n')
                 stderr_handle.write(f'[{time.ctime()}] Running {script_name}\n')
-                if script_name == 'make_cache.py':
-                    percent_pattern = re.compile(r'(\d{1,3})%')
+                if script_name in {'analyze.py', 'make_cache.py'}:
                     proc = subprocess.Popen(
                         [sys.executable, script_name],
                         stdout=subprocess.PIPE,
@@ -908,15 +989,19 @@ def _run_recompute_job():
                     for line in proc.stdout:
                         stdout_handle.write(line)
                         stdout_handle.flush()
-                        match = percent_pattern.search(line)
+                        if script_name == 'analyze.py':
+                            match = analyze_read_pattern.search(line) or analyze_batch_pattern.search(line)
+                        else:
+                            match = make_cache_progress_pattern.search(line)
                         if match:
-                            percent_value = int(match.group(1))
-                            if 0 <= percent_value <= 100:
-                                _update_recompute_status(
-                                    'running',
-                                    message=f'Running {script_name}',
-                                    percent=percent_value,
-                                )
+                            processed = int(match.group(1))
+                            total = int(match.group(2))
+                            _update_recompute_status(
+                                'running',
+                                message=f'Running {script_name}',
+                                processed=processed,
+                                total=total,
+                            )
                     returncode = proc.wait()
                 else:
                     proc = subprocess.run(
@@ -939,7 +1024,8 @@ def _run_recompute_job():
                 _update_recompute_status(
                     'running',
                     message=f'Finished {script_name}',
-                    percent='—',
+                    percent=None,
+                    clear_progress=True,
                 )
             stdout_handle.write(f'[{time.ctime()}] Recompute finished\n')
             stderr_handle.write(f'[{time.ctime()}] Recompute finished\n')
@@ -984,7 +1070,7 @@ def _run_ingest_job(job_id: str, paper_id: str):
             emit('Recompute already running...', 90, 'Existing cache recompute is still running.')
         else:
             emit('Queued recompute...', 90, 'Cache recompute will run in the background.')
-            _update_recompute_status('queued', message='Recompute queued', percent='—')
+            _update_recompute_status('queued', message='Recompute queued', percent=None, clear_progress=True)
             with recompute_lock:
                 recompute_thread = threading.Thread(target=_run_recompute_job)
                 recompute_thread.daemon = True
@@ -1014,9 +1100,15 @@ def recompute_status_endpoint():
         'status': status.get('status'),
         'message': status.get('message'),
         'percent': status.get('percent'),
+        'processed': status.get('processed'),
+        'total': status.get('total'),
         'updated_at': status.get('updated_at'),
         'error': status.get('error'),
     })
+
+@app.route('/settings/db_metadata')
+def settings_db_metadata():
+    return jsonify(_get_db_metadata())
 
 
 @app.route('/ingest', methods=['POST'])
