@@ -47,6 +47,8 @@ recompute_status = {}
 recompute_status_path = os.path.join(ingest_jobs_dir, 'recompute_status.json')
 recompute_stdout_path = os.path.join(ingest_jobs_dir, 'recompute_stdout.log')
 recompute_stderr_path = os.path.join(ingest_jobs_dir, 'recompute_stderr.log')
+recompute_thread = None
+RECOMPUTE_STALE_SECONDS = 30 * 60
 
 # topic browsing globals
 TOPIC_PIDS = {}
@@ -813,6 +815,7 @@ def _load_recompute_status():
 def _get_recompute_status():
     with recompute_lock:
         status = recompute_status.get('state') or _load_recompute_status()
+        dirty = False
         if not status:
             status = {
                 'status': 'idle',
@@ -821,6 +824,26 @@ def _get_recompute_status():
                 'stdout_path': recompute_stdout_path,
                 'stderr_path': recompute_stderr_path,
             }
+            dirty = True
+        if 'stdout_path' not in status:
+            status['stdout_path'] = recompute_stdout_path
+            dirty = True
+        if 'stderr_path' not in status:
+            status['stderr_path'] = recompute_stderr_path
+            dirty = True
+        now = int(time.time())
+        updated_at = status.get('updated_at', now)
+        thread_active = recompute_thread is not None and recompute_thread.is_alive()
+        if status.get('status') in {'running', 'queued'}:
+            stale = (now - updated_at) > RECOMPUTE_STALE_SECONDS
+            if stale and not thread_active:
+                status['status'] = 'idle'
+                status['updated_at'] = now
+                status.pop('message', None)
+                status.pop('percent', None)
+                status.pop('error', None)
+                dirty = True
+        if dirty:
             recompute_status['state'] = status
             _persist_recompute_status(status)
         return dict(status)
@@ -852,6 +875,7 @@ def _update_recompute_status(status: str, message: Optional[str] = None, error: 
 
 
 def _run_recompute_job():
+    global recompute_thread
     try:
         _update_recompute_status('running', message='Recomputing caches', percent=0)
         _ensure_ingest_jobs_dir()
@@ -896,6 +920,10 @@ def _run_recompute_job():
     else:
         _update_recompute_status('finished', message='Recompute finished successfully', percent=100)
 
+    finally:
+        with recompute_lock:
+            recompute_thread = None
+
 
 def _ingest_job_path(job_id: str) -> str:
     return os.path.join(ingest_jobs_dir, f'{job_id}.json')
@@ -916,6 +944,7 @@ def _load_ingest_job(job_id: str):
 
 
 def _run_ingest_job(job_id: str, paper_id: str):
+    global recompute_thread
     def emit(label: str, percent: int, message: Optional[str] = None, warning: bool = False):
         _update_ingest_job(job_id, label, percent, message, warning=warning)
     try:
@@ -927,9 +956,10 @@ def _run_ingest_job(job_id: str, paper_id: str):
         else:
             emit('Queued recompute...', 90, 'Cache recompute will run in the background.')
             _update_recompute_status('queued', message='Recompute queued', percent=0)
-            recompute_thread = threading.Thread(target=_run_recompute_job)
-            recompute_thread.daemon = True
-            recompute_thread.start()
+            with recompute_lock:
+                recompute_thread = threading.Thread(target=_run_recompute_job)
+                recompute_thread.daemon = True
+                recompute_thread.start()
     except Exception as e:
         _update_ingest_job(job_id, 'Ingest failed', 100, str(e), done=True, error=True)
     else:
