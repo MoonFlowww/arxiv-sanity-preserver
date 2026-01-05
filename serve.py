@@ -393,6 +393,41 @@ def handle_unexpected_exception(error):
     app.logger.exception("unhandled_exception request_id=%s", getattr(g, 'request_id', None))
     return InternalServerError()
 
+def _truncate_text(value, max_length=2000):
+    if value is None:
+        return None
+    text = str(value)
+    if len(text) > max_length:
+        return text[:max_length] + '…'
+    return text
+
+
+@app.route('/log/client-error', methods=['POST'])
+@limiter.limit("5 per minute; 50 per hour")
+def log_client_error():
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        payload = {}
+    message = _truncate_text(payload.get('message'), 1000)
+    stack = _truncate_text(payload.get('stack'), 4000)
+    url = _truncate_text(payload.get('url') or payload.get('page_url'), 1000)
+    line = payload.get('line')
+    column = payload.get('column')
+    user_agent = _truncate_text(payload.get('user_agent') or request.headers.get('User-Agent'), 500)
+    request_id = getattr(g, 'request_id', None)
+    app.logger.warning(
+        "client_error request_id=%s ip=%s message=%s url=%s line=%s column=%s user_agent=%s stack=%s",
+        request_id,
+        request.remote_addr,
+        message,
+        url,
+        line,
+        column,
+        user_agent,
+        stack,
+    )
+    return jsonify({"status": "ok"})
+
 
 
 # -----------------------------------------------------------------------------

@@ -218,6 +218,78 @@
             });
         }
     </script>
+    <script>
+        (function () {
+            var endpoint = '/log/client-error';
+            var maxReports = 5;
+            var reportCount = 0;
+
+            function normalize(value, maxLength) {
+                if (value === null || value === undefined) {
+                    return null;
+                }
+                var text = String(value);
+                if (maxLength && text.length > maxLength) {
+                    return text.slice(0, maxLength) + '…';
+                }
+                return text;
+            }
+
+            function postError(payload) {
+                if (reportCount >= maxReports) {
+                    return;
+                }
+                reportCount += 1;
+                payload.user_agent = normalize(navigator.userAgent, 500);
+                payload.page_url = normalize(window.location.href, 1000);
+                payload.timestamp = new Date().toISOString();
+                try {
+                    fetch(endpoint, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        credentials: 'same-origin',
+                        body: JSON.stringify(payload),
+                        keepalive: true
+                    });
+                } catch (error) {
+                    // swallow any secondary errors from reporting
+                }
+            }
+
+            window.onerror = function (message, source, lineno, colno, error) {
+                var stack = error && error.stack ? error.stack : null;
+                postError({
+                    message: normalize(message, 1000),
+                    stack: normalize(stack, 4000),
+                    url: normalize(source, 1000),
+                    line: lineno || null,
+                    column: colno || null
+                });
+                return false;
+            };
+
+            window.onunhandledrejection = function (event) {
+                var reason = event && event.reason;
+                var message = null;
+                var stack = null;
+                if (reason) {
+                    if (typeof reason === 'string') {
+                        message = reason;
+                    } else {
+                        message = reason.message || String(reason);
+                        stack = reason.stack || null;
+                    }
+                }
+                postError({
+                    message: normalize(message || 'Unhandled promise rejection', 1000),
+                    stack: normalize(stack, 4000),
+                    url: normalize(window.location.href, 1000),
+                    line: null,
+                    column: null
+                });
+            };
+        })();
+    </script>
 
     <script>
 
