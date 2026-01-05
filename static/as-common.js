@@ -75,6 +75,18 @@ function initLayoutToggle(buttonSelector) {
     updateToggleState(appliedInitial);
 }
 
+function updateRecomputeBadge(isFinished) {
+    var badge = $('#recompute-badge');
+    if (!badge.length) {
+        return;
+    }
+
+    var finished = Boolean(isFinished);
+    badge.toggleClass('recompute-badge-finished', finished);
+    badge.attr('aria-hidden', finished ? 'true' : 'false');
+}
+
+
 function jq(myid) {
     return myid.replace(/(:|\.|\[|\]|,)/g, "\\$1");
 } // for dealing with ids that have . in them
