@@ -609,6 +609,34 @@
 <!-- HEADER -->
 <div id="titdiv">
     <!-- Site information/banner -->
+    <div class="header-health">
+        <button type="button" class="health-toggle" id="health-state-button" aria-label="Open health state"
+                aria-haspopup="true" aria-expanded="false" aria-controls="health-state-panel">
+            <span aria-hidden="true">📶</span>
+        </button>
+        <div class="health-panel" id="health-state-panel" aria-hidden="true">
+            <div class="health-section">
+                <div class="health-section-title">Database</div>
+                <div class="health-row" id="health-db-status">Loading...</div>
+            </div>
+            <div class="health-section">
+                <div class="health-section-title">Site Health</div>
+                <div class="health-row" id="health-site-status">Loading...</div>
+            </div>
+            <div class="health-section">
+                <div class="health-section-title">Network</div>
+                <div class="health-row" id="health-network-status">Loading...</div>
+            </div>
+            <div class="health-section">
+                <div class="health-section-title">System status</div>
+                <div class="health-row">All services are running normally.</div>
+            </div>
+            <div class="health-section">
+                <div class="health-section-title">Errors</div>
+                <ul class="health-errors" id="health-errors-list"></ul>
+            </div>
+        </div>
+    </div>
     <div class="header-actions">
         <button type="button" class="settings-toggle" aria-label="Open settings" aria-haspopup="dialog"
                 aria-controls="settings-overlay">
