@@ -75,6 +75,64 @@ function initLayoutToggle(buttonSelector) {
     updateToggleState(appliedInitial);
 }
 
+function updateRecomputeBadge(isFinished) {
+    var badge = $('#recompute-badge');
+    if (!badge.length) {
+        return;
+    }
+
+    var finished = Boolean(isFinished);
+    badge.toggleClass('recompute-badge-finished', finished);
+    badge.attr('aria-hidden', finished ? 'true' : 'false');
+}
+
+function reportClientError(message, context) {
+    if (!message) {
+        return;
+    }
+    try {
+        $.ajax({
+            url: '/status/report_error',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                source: 'client',
+                message: message,
+                context: context || {},
+            }),
+        });
+    } catch (e) {
+    }
+}
+
+window.addEventListener('error', function (event) {
+    var message = event.message || 'Unknown client error';
+    reportClientError(message, {
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+    });
+});
+
+window.addEventListener('unhandledrejection', function (event) {
+    var message = event.reason ? event.reason.toString() : 'Unhandled promise rejection';
+    reportClientError(message, {});
+});
+
+
+function updateRecomputeBadge(isFinished) {
+    var badge = $('#recompute-badge');
+    if (!badge.length) {
+        return;
+    }
+
+    var finished = Boolean(isFinished);
+    badge.toggleClass('recompute-badge-finished', finished);
+    badge.attr('aria-hidden', finished ? 'true' : 'false');
+}
+
+
+
 function jq(myid) {
     return myid.replace(/(:|\.|\[|\]|,)/g, "\\$1");
 } // for dealing with ids that have . in them

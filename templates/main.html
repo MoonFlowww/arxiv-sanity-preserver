@@ -92,26 +92,29 @@
             });
         }
         function initSettingsModal() {
-            var openButton = document.querySelector('.settings-toggle');
-            var overlay = document.getElementById('settings-overlay');
-            if (!openButton || !overlay) {
+            var openButton = $('.settings-toggle');
+            var overlay = $('#settings-overlay');
+            var modal = $('#settings-modal');
+            if (!openButton.length || !overlay.length || !modal.length) {
                 return;
             }
-            var closeButton = overlay.querySelector('.settings-close');
-            var tabButtons = overlay.querySelectorAll('.settings-tab');
-            var panels = overlay.querySelectorAll('.settings-panel');
-            var dbContainer = overlay.querySelector('.settings-db-metadata');
+            var closeButton = overlay.find('.settings-close');
+            var tabButtons = overlay.find('.settings-tab');
+            var panels = overlay.find('.settings-panel');
+            var dbContainer = overlay.find('.settings-db-metadata');
 
             function setActiveTab(tabName) {
-                tabButtons.forEach(function (button) {
-                    var isActive = button.getAttribute('data-tab') === tabName;
-                    button.classList.toggle('is-active', isActive);
-                    button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                tabButtons.each(function () {
+                    var button = $(this);
+                    var isActive = button.attr('data-tab') === tabName;
+                    button.toggleClass('is-active', isActive);
+                    button.attr('aria-selected', isActive ? 'true' : 'false');
                 });
-                panels.forEach(function (panel) {
-                    var isActive = panel.getAttribute('data-tab-panel') === tabName;
-                    panel.classList.toggle('is-active', isActive);
-                    panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+                panels.each(function () {
+                    var panel = $(this);
+                    var isActive = panel.attr('data-tab-panel') === tabName;
+                    panel.toggleClass('is-active', isActive);
+                    panel.attr('aria-hidden', isActive ? 'false' : 'true');
                 });
             }
 
@@ -123,7 +126,7 @@
             }
 
             function renderDbMetadata(data) {
-                if (!dbContainer) {
+                if (!dbContainer.length) {
                     return;
                 }
                 var dbItems = (data.available_dbs || []).map(function (entry) {
@@ -141,7 +144,7 @@
                         range.earliest + ' → ' + range.latest + '</span></li>';
                 }).join('');
 
-                dbContainer.innerHTML = '' +
+                dbContainer.html('' +
                     '<div class="settings-db-grid">' +
                     '<div class="settings-db-card">' +
                     '<h4>Database overview</h4>' +
@@ -159,62 +162,133 @@
                     '<div class="settings-db-card">' +
                     '<h4>Category date ranges</h4>' +
                     '<ul class="settings-range-list">' + ranges + '</ul>' +
-                    '</div>';
+                    '</div>');
             }
 
             function loadDbMetadata() {
                 if (!dbContainer) {
                     return;
                 }
-                dbContainer.innerHTML = '<p class="settings-loading">Loading database metadata...</p>';
-                fetch('/settings/db_metadata')
-                    .then(function (response) { return response.json(); })
-                    .then(function (data) { renderDbMetadata(data); })
-                    .catch(function () {
-                        dbContainer.innerHTML = '<p class="settings-error">Unable to load database metadata.</p>';
-                    });
+                dbContainer.html('<p class="settings-loading">Loading database metadata...</p>');
+                $.getJSON('/settings/db_metadata', function (data) {
+                    renderDbMetadata(data);
+                }).fail(function () {
+                    dbContainer.html('<p class="settings-error">Unable to load database metadata.</p>');
+                });
             }
 
             function openModal() {
-                overlay.classList.add('visible');
-                overlay.setAttribute('aria-hidden', 'false');
+                overlay.addClass('visible');
+                modal.addClass('visible');
+                overlay.attr('aria-hidden', 'false');
                 setActiveTab('general');
                 loadDbMetadata();
             }
 
             function closeModal() {
-                overlay.classList.remove('visible');
-                overlay.setAttribute('aria-hidden', 'true');
+                overlay.removeClass('visible');
+                modal.removeClass('visible');
+                overlay.attr('aria-hidden', 'true');
             }
 
-            openButton.addEventListener('click', function () {
+            openButton.on('click', function () {
                 openModal();
             });
 
-            if (closeButton) {
-                closeButton.addEventListener('click', function () {
+            if (closeButton.length) {
+                closeButton.on('click', function () {
                     closeModal();
                 });
             }
 
-            overlay.addEventListener('click', function (event) {
-                if (event.target === overlay) {
+            overlay.on('click', function (event) {
+                if (event.target === this) {
                     closeModal();
                 }
             });
 
-            document.addEventListener('keydown', function (event) {
-                if (event.key === 'Escape' && overlay.classList.contains('visible')) {
+            $(document).on('keydown', function (event) {
+                if (event.key === 'Escape' && overlay.hasClass('visible')) {
                     closeModal();
                 }
             });
 
-            tabButtons.forEach(function (button) {
-                button.addEventListener('click', function () {
-                    setActiveTab(button.getAttribute('data-tab'));
-                });
+            tabButtons.on('click', function () {
+                setActiveTab($(this).attr('data-tab'));
             });
         }
+    </script>
+    <script>
+        (function () {
+            var endpoint = '/log/client-error';
+            var maxReports = 5;
+            var reportCount = 0;
+
+            function normalize(value, maxLength) {
+                if (value === null || value === undefined) {
+                    return null;
+                }
+                var text = String(value);
+                if (maxLength && text.length > maxLength) {
+                    return text.slice(0, maxLength) + '…';
+                }
+                return text;
+            }
+
+            function postError(payload) {
+                if (reportCount >= maxReports) {
+                    return;
+                }
+                reportCount += 1;
+                payload.user_agent = normalize(navigator.userAgent, 500);
+                payload.page_url = normalize(window.location.href, 1000);
+                payload.timestamp = new Date().toISOString();
+                try {
+                    fetch(endpoint, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        credentials: 'same-origin',
+                        body: JSON.stringify(payload),
+                        keepalive: true
+                    });
+                } catch (error) {
+                    // swallow any secondary errors from reporting
+                }
+            }
+
+            window.onerror = function (message, source, lineno, colno, error) {
+                var stack = error && error.stack ? error.stack : null;
+                postError({
+                    message: normalize(message, 1000),
+                    stack: normalize(stack, 4000),
+                    url: normalize(source, 1000),
+                    line: lineno || null,
+                    column: colno || null
+                });
+                return false;
+            };
+
+            window.onunhandledrejection = function (event) {
+                var reason = event && event.reason;
+                var message = null;
+                var stack = null;
+                if (reason) {
+                    if (typeof reason === 'string') {
+                        message = reason;
+                    } else {
+                        message = reason.message || String(reason);
+                        stack = reason.stack || null;
+                    }
+                }
+                postError({
+                    message: normalize(message || 'Unhandled promise rejection', 1000),
+                    stack: normalize(stack, 4000),
+                    url: normalize(window.location.href, 1000),
+                    line: null,
+                    column: null
+                });
+            };
+        })();
     </script>
 
     <script>
@@ -224,10 +298,10 @@
 
         var papers = {{ papers | tojson }};
 
-        var msg = "{{ msg }}";
-        var render_format = "{{ render_format }}";
-        var numresults = "{{ numresults }}";
-        var show_prompt = "{{ show_prompt }}";
+        var msg = {{ msg | tojson }};
+        var render_format = {{ render_format | tojson }};
+        var numresults = {{ numresults | tojson }};
+        var show_prompt = {{ show_prompt | tojson }};
 
         var urlq = ''; // global will be read in to QueryString when load is done
 
@@ -354,19 +428,22 @@
             var isActive = status === 'running' || status === 'queued';
             var percent = getRecomputePercent(state);
             var message = state.message || (status === 'queued' ? 'Recompute queued...' : 'Recomputing caches...');
+            var percentValue = typeof percent === 'number' ? percent : 0;
 
             if (isActive) {
                 showRecomputePanel(message, percent, 'info');
             } else {
                 hideRecomputePanel();
-                updateRecomputeBadge(status === 'finished');
+                if (typeof updateRecomputeBadge === 'function') {
+                    updateRecomputeBadge(status === 'finished');
+                }
             }
 
 
             if (!ingestJobId && !ingestPoller) {
                 if (isActive) {
                     setIngestButtonBusy(true);
-                    updateIngestButtonProgress(message, percent);
+                    updateIngestButtonProgress(percentValue + '%', percentValue);
                 } else {
                     setIngestButtonBusy(false);
                 }
@@ -515,6 +592,8 @@
 
             initLayoutToggle('.layout-btn');
             initThemeToggle();
+            initSettingsModal();
+            initHealthPanel();
             $('#ingest-overlay').on('click', function (event) {
                 if (event.target === this) {
                     hideIngestOverlay();
@@ -776,7 +855,7 @@
 </div>
 
 <div class="settings-overlay" id="settings-overlay" aria-hidden="true">
-    <div class="settings-modal" role="dialog" aria-labelledby="settings-modal-title"
+    <div class="settings-modal" id="settings-modal" role="dialog" aria-labelledby="settings-modal-title"
          aria-describedby="settings-modal-description">
         <div class="settings-header">
             <h3 id="settings-modal-title">Settings</h3>
