@@ -227,10 +227,10 @@
 
         var papers = {{ papers | tojson }};
 
-        var msg = "{{ msg }}";
-        var render_format = "{{ render_format }}";
-        var numresults = "{{ numresults }}";
-        var show_prompt = "{{ show_prompt }}";
+        var msg = {{ msg | tojson }};
+        var render_format = {{ render_format | tojson }};
+        var numresults = {{ numresults | tojson }};
+        var show_prompt = {{ show_prompt | tojson }};
 
         var urlq = ''; // global will be read in to QueryString when load is done
 
