@@ -9,6 +9,8 @@ import subprocess
 import sys
 import pymongo
 import re
+import shutil
+import socket
 import threading
 import time
 import uuid
@@ -933,6 +935,122 @@ def _get_db_health():
     }
 
 
+def _run_command(cmd, timeout_seconds=1):
+    try:
+        completed = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return None
+    return completed.stdout.strip()
+
+
+def _parse_ip_route_get(output):
+    if not output:
+        return {}
+    match = re.search(r'\bdev (?P<dev>\S+)', output)
+    src_match = re.search(r'\bsrc (?P<src>\S+)', output)
+    gateway_match = re.search(r'\bvia (?P<via>\S+)', output)
+    return {
+        'interface': match.group('dev') if match else None,
+        'ip': src_match.group('src') if src_match else None,
+        'gateway': gateway_match.group('via') if gateway_match else None,
+    }
+
+
+def _get_network_status(timeout_seconds=1):
+    status = {
+        'interface': None,
+        'ip': None,
+        'gateway': None,
+        'state': 'unknown',
+        'checks': {
+            'gateway_reachable': {'ok': None, 'error': None},
+            'dns_resolution': {'ok': None, 'error': None},
+            'external_ping': {'ok': None, 'error': None},
+        },
+    }
+
+    default_route = _run_command(['ip', 'route', 'show', 'default'], timeout_seconds=timeout_seconds)
+    if default_route:
+        match = re.search(r'default via (?P<gateway>\S+) dev (?P<dev>\S+)', default_route)
+        if match:
+            status['gateway'] = match.group('gateway')
+            status['interface'] = match.group('dev')
+
+    route_get = _run_command(['ip', 'route', 'get', '1.1.1.1'], timeout_seconds=timeout_seconds)
+    route_info = _parse_ip_route_get(route_get)
+    status['interface'] = status['interface'] or route_info.get('interface')
+    status['ip'] = status['ip'] or route_info.get('ip')
+    status['gateway'] = status['gateway'] or route_info.get('gateway')
+
+    if status['interface'] and not status['ip']:
+        addr_output = _run_command(
+            ['ip', '-o', '-4', 'addr', 'show', 'dev', status['interface']],
+            timeout_seconds=timeout_seconds,
+        )
+        if addr_output:
+            addr_match = re.search(r'\binet (?P<ip>\S+)', addr_output)
+            if addr_match:
+                status['ip'] = addr_match.group('ip').split('/')[0]
+
+    if shutil.which('ping') and status['gateway']:
+        try:
+            result = subprocess.run(
+                ['ping', '-c', '1', '-W', str(max(1, timeout_seconds)), status['gateway']],
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+            )
+            status['checks']['gateway_reachable']['ok'] = result.returncode == 0
+            if result.returncode != 0:
+                status['checks']['gateway_reachable']['error'] = (result.stderr or result.stdout).strip() or None
+        except (OSError, subprocess.TimeoutExpired, PermissionError) as exc:
+            status['checks']['gateway_reachable']['ok'] = None
+            status['checks']['gateway_reachable']['error'] = str(exc)
+
+    old_timeout = socket.getdefaulttimeout()
+    try:
+        socket.setdefaulttimeout(timeout_seconds)
+        socket.getaddrinfo('example.com', 80)
+        status['checks']['dns_resolution']['ok'] = True
+    except OSError as exc:
+        status['checks']['dns_resolution']['ok'] = False
+        status['checks']['dns_resolution']['error'] = str(exc)
+    finally:
+        socket.setdefaulttimeout(old_timeout)
+
+    if shutil.which('ping'):
+        try:
+            result = subprocess.run(
+                ['ping', '-c', '1', '-W', str(max(1, timeout_seconds)), '1.1.1.1'],
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+            )
+            status['checks']['external_ping']['ok'] = result.returncode == 0
+            if result.returncode != 0:
+                status['checks']['external_ping']['error'] = (result.stderr or result.stdout).strip() or None
+        except (OSError, subprocess.TimeoutExpired, PermissionError) as exc:
+            status['checks']['external_ping']['ok'] = None
+            status['checks']['external_ping']['error'] = str(exc)
+
+    check_values = [check['ok'] for check in status['checks'].values()]
+    if all(value is True for value in check_values if value is not None) and any(
+            value is True for value in check_values
+    ):
+        status['state'] = 'online'
+    elif any(value is False for value in check_values):
+        status['state'] = 'degraded' if any(value is True for value in check_values) else 'offline'
+    else:
+        status['state'] = 'unknown'
+
+    return status
+
 def _get_db_metadata():
     with data_lock:
         paper_values = list(db.values())
@@ -1186,12 +1304,18 @@ def recompute_status_endpoint():
 def status_health():
     return jsonify({
         'db': _get_db_health(),
+        'network': _get_network_status(),
         'site': {
             'uptime_seconds': int(time.time() - APP_START_TIME),
             'version': APP_VERSION,
             'recompute_status': _get_recompute_status(),
         },
     })
+
+@app.route('/status/network')
+def status_network():
+    return jsonify(_get_network_status())
+
 @app.route('/settings/db_metadata')
 def settings_db_metadata():
     return jsonify(_get_db_metadata())
