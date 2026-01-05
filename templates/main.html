@@ -43,8 +43,28 @@
 
     </script>
     <script>
+        var themePreference = null;
+        function getStoredTheme() {
+            try {
+                return localStorage.getItem('theme');
+            } catch (error) {
+                return themePreference;
+            }
+        }
+        function setStoredTheme(value) {
+            themePreference = value;
+            try {
+                localStorage.setItem('theme', value);
+            } catch (error) {
+                // ignore storage errors
+            }
+        }
         (function () {
-            var storedTheme = localStorage.getItem('theme');
+            var storedTheme = getStoredTheme();
+            if (!storedTheme) {
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                storedTheme = prefersDark ? 'dark' : 'light';
+            }
             if (storedTheme === 'dark') {
                 document.documentElement.classList.add('dark-mode');
             }
@@ -58,7 +78,7 @@
             var setLabel = function () {
                 var isDark = document.documentElement.classList.contains('dark-mode');
                 toggleButton.innerHTML = isDark
-                    ? '<span class="theme-icon" aria-hidden="true">☀️</span>'
+                    ? '<span class="theme-icon" aria-hidden="true">꥟</span>'
                     : '<span class="theme-icon" aria-hidden="true">🌙</span>';
                 toggleButton.setAttribute('aria-pressed', isDark ? 'true' : 'false');
                 toggleButton.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
@@ -67,7 +87,7 @@
             toggleButton.addEventListener('click', function () {
                 document.documentElement.classList.toggle('dark-mode');
                 var isDark = document.documentElement.classList.contains('dark-mode');
-                localStorage.setItem('theme', isDark ? 'dark' : 'light');
+                setStoredTheme(isDark ? 'dark' : 'light');
                 setLabel();
             });
         }
@@ -80,11 +100,8 @@
 
         var papers = {{ papers | tojson }};
 
-        var pid_to_users = {{pid_to_users | tojson}};
-
         var msg = "{{ msg }}";
         var render_format = "{{ render_format }}";
-        var username = "{{ g.user.username }}";
         var numresults = "{{ numresults }}";
         var show_prompt = "{{ show_prompt }}";
 

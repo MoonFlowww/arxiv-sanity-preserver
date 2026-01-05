@@ -662,9 +662,6 @@ def encode_json(ps, n=10, send_images=True, send_abstracts=True):
         timestruct = dateutil.parser.parse(p['published'])
         struct['originally_published_time'] = '%s/%s/%s' % (timestruct.month, timestruct.day, timestruct.year)
 
-        # fetch amount of discussion on this paper
-        struct['num_discussion'] = 0  # comments.count({ 'pid': p['_rawid'] })
-
         # arxiv comments from the authors (when they submit the paper)
         cc = p.get('arxiv_comment', '')
         if len(cc) > 100:
@@ -705,7 +702,6 @@ def default_context(papers, **kws):
         tweets=[],
         msg='',
         show_prompt=show_prompt,
-        pid_to_users={},
         topics=TOPICS,
         selected_topic='',
         selected_topic_display='',
@@ -1011,120 +1007,6 @@ def rank(request_pid=None):
     return render_template('main.html', **ctx)
 
 
-@app.route('/discuss', methods=['GET'])
-def discuss():
-    """ return discussion related to a paper """
-    pid = request.args.get('id', '')  # paper id of paper we wish to discuss
-    papers = [db[pid]] if pid in db else []
-
-    # fetch the comments
-    comms_cursor = comments.find({'pid': pid}).sort([('time_posted', pymongo.DESCENDING)])
-    comms = list(comms_cursor)
-    for c in comms:
-        c['_id'] = str(c[
-                           '_id'])  # have to convert these to strs from ObjectId, and backwards later http://api.mongodb.com/python/current/tutorial.html
-
-    # fetch the counts for all tags
-    tag_counts = []
-    for c in comms:
-        cc = [tags_collection.count({'comment_id': c['_id'], 'tag_name': t}) for t in TAGS]
-        tag_counts.append(cc);
-
-    # and render
-    ctx = default_context(papers, render_format='default', comments=comms, gpid=pid, tags=TAGS, tag_counts=tag_counts)
-    return render_template('discuss.html', **ctx)
-
-
-@app.route('/comment', methods=['POST'])
-def comment():
-    """ user wants to post a comment """
-    anon = int(request.form['anon'])
-
-    if g.user and (not anon):
-        username = get_username(current_user_id())
-    else:
-        # generate a unique username if user wants to be anon, or user not logged in.
-        username = 'anon-%s-%s' % (str(int(time.time())), str(randrange(1000)))
-
-    # process the raw pid and validate it, etc
-    try:
-        pid = request.form['pid']
-        if not pid in db: raise Exception("invalid pid")
-        version = db[pid]['_version']  # most recent version of this paper
-    except Exception as e:
-        print(e)
-        return 'bad pid. This is most likely Andrej\'s fault.'
-
-    # create the entry
-    entry = {
-        'user': username,
-        'pid': pid,  # raw pid with no version, for search convenience
-        'version': version,  # version as int, again as convenience
-        'conf': request.form['conf'],
-        'anon': anon,
-        'time_posted': time.time(),
-        'text': request.form['text'],
-    }
-
-    # enter into database
-    print(entry)
-    comments.insert_one(entry)
-    return 'OK'
-
-
-@app.route("/discussions", methods=['GET'])
-def discussions():
-    # return most recently discussed papers
-    comms_cursor = comments.find().sort([('time_posted', pymongo.DESCENDING)]).limit(100)
-
-    # get the (unique) set of papers.
-    papers = []
-    have = set()
-    for e in comms_cursor:
-        pid = e['pid']
-        if pid in db and not pid in have:
-            have.add(pid)
-            papers.append(db[pid])
-
-    ctx = default_context(papers, render_format="discussions")
-    return render_template('main.html', **ctx)
-
-
-@app.route('/toggletag', methods=['POST'])
-def toggletag():
-    if not g.user:
-        return 'You have to be logged in to tag. Sorry - otherwise things could get out of hand FAST.'
-
-    # get the tag and validate it as an allowed tag
-    tag_name = request.form['tag_name']
-    if not tag_name in TAGS:
-        print('tag name %s is not in allowed tags.' % (tag_name,))
-        return "Bad tag name. This is most likely Andrej's fault."
-
-    pid = request.form['pid']
-    comment_id = request.form['comment_id']
-    username = get_username(current_user_id())
-    time_toggled = time.time()
-    entry = {
-        'username': username,
-        'pid': pid,
-        'comment_id': comment_id,
-        'tag_name': tag_name,
-        'time': time_toggled,
-    }
-
-    # remove any existing entries for this user/comment/tag
-    result = tags_collection.delete_one({'username': username, 'comment_id': comment_id, 'tag_name': tag_name})
-    if result.deleted_count > 0:
-        print('cleared an existing entry from database')
-    else:
-        print('no entry existed, so this is a toggle ON. inserting:')
-        print(entry)
-        tags_collection.insert_one(entry)
-
-    return 'OK'
-
-
 @app.route("/search", methods=['GET'])
 def search():
     q = request.args.get('q', '')  # get the search request
@@ -1300,159 +1182,6 @@ def review():
     return ret
 
 
-@app.route('/friends', methods=['GET'])
-def friends():
-    ttstr = request.args.get('timefilter', 'week')  # default is week
-    legend = {'day': 1, '3days': 3, 'week': 7, 'month': 30, 'year': 365}
-    tt = legend.get(ttstr, 7)
-
-    if follow_collection is None:
-        ctx = default_context([], render_format='friends', pid_to_users={},
-                              msg='Following is disabled in single-user mode.')
-        return render_template('main.html', **ctx)
-
-    papers = []
-    pid_to_users = {}
-    if g.user:
-        # gather all the people we are following
-        username = get_username(current_user_id())
-        edges = list(follow_collection.find({'who': username}))
-        # fetch all papers in all of their libraries, and count the top ones
-        counts = {}
-        for edict in edges:
-            whom = edict['whom']
-            uid = get_user_id(whom)
-            user_library = query_db('''select *
-                                       from library
-                                       where user_id = ?''', [uid])
-            libids = [strip_version(x['paper_id']) for x in user_library]
-            for lid in libids:
-                if not lid in counts:
-                    counts[lid] = []
-                counts[lid].append(whom)
-
-        keys = list(counts.keys())
-        keys.sort(key=lambda k: len(counts[k]), reverse=True)  # descending by count
-        papers = [db[x] for x in keys]
-        # finally filter by date
-        curtime = int(time.time())  # in seconds
-        papers = [x for x in papers if curtime - x['time_published'] < tt * 24 * 60 * 60]
-        # trim at like 100
-        if len(papers) > 100: papers = papers[:100]
-        # trim counts as well correspondingly
-        pid_to_users = {p['_rawid']: counts.get(p['_rawid'], []) for p in papers}
-
-    if len(papers) == 0:
-        msg = "No friend papers present."
-    else:
-        msg = "Papers in your friend's libraries:"
-
-    ctx = default_context(papers, render_format='friends', pid_to_users=pid_to_users, msg=msg)
-    return render_template('main.html', **ctx)
-
-
-@app.route('/account')
-def account():
-    ctx = {'totpapers': len(db)}
-
-    followers = []
-    following = []
-    # fetch all followers/following of the logged in user
-    if g.user and follow_collection is not None:
-        username = get_username(current_user_id())
-
-        following_db = list(follow_collection.find({'who': username}))
-        for e in following_db:
-            following.append({'user': e['whom'], 'active': e['active']})
-
-        followers_db = list(follow_collection.find({'whom': username}))
-        for e in followers_db:
-            followers.append({'user': e['who'], 'active': e['active']})
-
-    ctx['followers'] = followers
-    ctx['following'] = following
-    return render_template('account.html', **ctx)
-
-
-@app.route('/requestfollow', methods=['POST'])
-def requestfollow():
-    if follow_collection is None:
-        flash('Following is disabled in single-user mode.')
-        return redirect(url_for('account'))
-    if request.form['newf'] and g.user:
-        # add an entry: this user is requesting to follow a second user
-        who = get_username(current_user_id())
-        whom = request.form['newf']
-        # make sure whom exists in our database
-        whom_id = get_user_id(whom)
-        if whom_id is not None:
-            e = {'who': who, 'whom': whom, 'active': 0, 'time_request': int(time.time())}
-            print('adding request follow:')
-            print(e)
-            follow_collection.insert_one(e)
-
-    return redirect(url_for('account'))
-
-
-@app.route('/removefollow', methods=['POST'])
-def removefollow():
-    user = request.form['user']
-    lst = request.form['lst']
-    if follow_collection is None:
-        return 'NOTOK'
-    if user and lst:
-        username = get_username(current_user_id())
-        if lst == 'followers':
-            # user clicked "X" in their followers list. Erase the follower of this user
-            who = user
-            whom = username
-        elif lst == 'following':
-            # user clicked "X" in their following list. Stop following this user.
-            who = username
-            whom = user
-        else:
-            return 'NOTOK'
-
-        delq = {'who': who, 'whom': whom}
-        print('deleting from follow collection:', delq)
-        follow_collection.delete_one(delq)
-        return 'OK'
-    else:
-        return 'NOTOK'
-
-
-@app.route('/addfollow', methods=['POST'])
-def addfollow():
-    user = request.form['user']
-    lst = request.form['lst']
-    if follow_collection is None:
-        return 'NOTOK'
-    if user and lst:
-        username = get_username(current_user_id())
-        if lst == 'followers':
-            # user clicked "OK" in the followers list, wants to approve some follower. make active.
-            who = user
-            whom = username
-            delq = {'who': who, 'whom': whom}
-            print('making active in follow collection:', delq)
-            follow_collection.update_one(delq, {'$set': {'active': 1}})
-            return 'OK'
-
-    return 'NOTOK'
-
-
-@app.route('/login', methods=['POST'])
-def login():
-    """Single-user mode: login is disabled."""
-    flash('Login is disabled in single-user mode. Using the local account instead.')
-    return redirect(url_for('intmain'))
-
-
-@app.route('/logout')
-def logout():
-    flash('Single-user mode is always active; logout is disabled.')
-    return redirect(url_for('intmain'))
-
 
 # -----------------------------------------------------------------------------
 # int main
@@ -1480,12 +1209,8 @@ if __name__ == "__main__":
     tweets_top1 = None
     tweets_top7 = None
     tweets_top30 = None
-    comments = None
-    tags_collection = None
     goaway_collection = None
-    follow_collection = None
 
-    TAGS = ['insightful!', 'thank you', 'agree', 'disagree', 'not constructive', 'troll', 'spam']
 
     # start
     if args.prod:
