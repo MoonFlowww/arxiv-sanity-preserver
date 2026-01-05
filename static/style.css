@@ -1396,6 +1396,9 @@ html.dark-mode .settings-tab.is-active {
     display: none;
     padding-top: 1rem;
 }
+.settings-panel.is-active {
+    display: block;
+}
 
 
 .settings-panel-content h4 {
