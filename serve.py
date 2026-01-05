@@ -1,6 +1,7 @@
 import argparse
 import dateutil.parser
 import json
+import logging
 import math
 import numpy as np
 import os
@@ -19,7 +20,7 @@ from hashlib import md5
 from random import shuffle, randrange, uniform
 from sqlite3 import dbapi2 as sqlite3
 from typing import Optional, Union
-
+from werkzeug.exceptions import HTTPException, InternalServerError
 from flask_limiter import Limiter
 from ingest_single_paper import ingest_paper
 from utils import strip_version, isvalidid, Config, open_atomic
@@ -39,6 +40,23 @@ else:
 app = Flask(__name__)
 app.config.from_object(__name__)
 limiter = Limiter(app, global_limits=["100 per hour", "20 per minute"])
+
+def configure_logging():
+    root_logger = logging.getLogger()
+    if not root_logger.handlers:
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(logging.Formatter(
+            '[%(asctime)s] %(levelname)s in %(module)s: %(message)s'
+        ))
+        root_logger.addHandler(handler)
+    root_logger.setLevel(logging.INFO)
+
+    app.logger.propagate = True
+    app.logger.setLevel(logging.INFO)
+
+
+configure_logging()
+
 
 ingest_jobs = {}
 ingest_lock = threading.Lock()
@@ -327,6 +345,11 @@ def current_user_id():
 
 @app.before_request
 def before_request():
+    g.request_id = (
+            request.headers.get('X-Request-ID')
+            or request.headers.get('X-Correlation-ID')
+            or str(uuid.uuid4())
+    )
     # this will always request database connection, even if we dont end up using it ;\
     g.db = connect_db()
     # single-user mode: always ensure a default user is present
@@ -338,6 +361,38 @@ def teardown_request(exception):
     db = getattr(g, 'db', None)
     if db is not None:
         db.close()
+
+def _log_request_exception(error, status_code):
+    user = getattr(g, 'user', None)
+    user_id = user['user_id'] if user is not None else None
+    username = user['username'] if user is not None else None
+    request_id = getattr(g, 'request_id', None)
+    log_fn = app.logger.error if status_code >= 500 else app.logger.warning
+    log_fn(
+        "request_error status=%s method=%s path=%s user_id=%s username=%s request_id=%s error=%s",
+        status_code,
+        request.method,
+        request.path,
+        user_id,
+        username,
+        request_id,
+        error,
+    )
+
+
+@app.errorhandler(HTTPException)
+def handle_http_exception(error):
+    status_code = error.code or 500
+    _log_request_exception(error, status_code)
+    return error
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_exception(error):
+    _log_request_exception(error, 500)
+    app.logger.exception("unhandled_exception request_id=%s", getattr(g, 'request_id', None))
+    return InternalServerError()
+
 
 
 # -----------------------------------------------------------------------------
