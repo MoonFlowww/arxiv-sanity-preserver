@@ -92,27 +92,29 @@
             });
         }
         function initSettingsModal() {
-            var openButton = document.querySelector('.settings-toggle');
-            var overlay = document.getElementById('settings-overlay');
-            var modal = document.getElementById('settings-modal');
-            if (!openButton || !overlay || !modal) {
+            var openButton = $('.settings-toggle');
+            var overlay = $('#settings-overlay');
+            var modal = $('#settings-modal');
+            if (!openButton.length || !overlay.length || !modal.length) {
                 return;
             }
-            var closeButton = overlay.querySelector('.settings-close');
-            var tabButtons = overlay.querySelectorAll('.settings-tab');
-            var panels = overlay.querySelectorAll('.settings-panel');
-            var dbContainer = overlay.querySelector('.settings-db-metadata');
+            var closeButton = overlay.find('.settings-close');
+            var tabButtons = overlay.find('.settings-tab');
+            var panels = overlay.find('.settings-panel');
+            var dbContainer = overlay.find('.settings-db-metadata');
 
             function setActiveTab(tabName) {
-                tabButtons.forEach(function (button) {
-                    var isActive = button.getAttribute('data-tab') === tabName;
-                    button.classList.toggle('is-active', isActive);
-                    button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                tabButtons.each(function () {
+                    var button = $(this);
+                    var isActive = button.attr('data-tab') === tabName;
+                    button.toggleClass('is-active', isActive);
+                    button.attr('aria-selected', isActive ? 'true' : 'false');
                 });
-                panels.forEach(function (panel) {
-                    var isActive = panel.getAttribute('data-tab-panel') === tabName;
-                    panel.classList.toggle('is-active', isActive);
-                    panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+                panels.each(function () {
+                    var panel = $(this);
+                    var isActive = panel.attr('data-tab-panel') === tabName;
+                    panel.toggleClass('is-active', isActive);
+                    panel.attr('aria-hidden', isActive ? 'false' : 'true');
                 });
             }
 
@@ -124,7 +126,7 @@
             }
 
             function renderDbMetadata(data) {
-                if (!dbContainer) {
+                if (!dbContainer.length) {
                     return;
                 }
                 var dbItems = (data.available_dbs || []).map(function (entry) {
@@ -142,7 +144,7 @@
                         range.earliest + ' → ' + range.latest + '</span></li>';
                 }).join('');
 
-                dbContainer.innerHTML = '' +
+                dbContainer.html('' +
                     '<div class="settings-db-grid">' +
                     '<div class="settings-db-card">' +
                     '<h4>Database overview</h4>' +
@@ -160,62 +162,59 @@
                     '<div class="settings-db-card">' +
                     '<h4>Category date ranges</h4>' +
                     '<ul class="settings-range-list">' + ranges + '</ul>' +
-                    '</div>';
+                    '</div>');
             }
 
             function loadDbMetadata() {
                 if (!dbContainer) {
                     return;
                 }
-                dbContainer.innerHTML = '<p class="settings-loading">Loading database metadata...</p>';
-                fetch('/settings/db_metadata')
-                    .then(function (response) { return response.json(); })
-                    .then(function (data) { renderDbMetadata(data); })
-                    .catch(function () {
-                        dbContainer.innerHTML = '<p class="settings-error">Unable to load database metadata.</p>';
-                    });
+                dbContainer.html('<p class="settings-loading">Loading database metadata...</p>');
+                $.getJSON('/settings/db_metadata', function (data) {
+                    renderDbMetadata(data);
+                }).fail(function () {
+                    dbContainer.html('<p class="settings-error">Unable to load database metadata.</p>');
+                });
             }
 
             function openModal() {
-                overlay.classList.add('visible');
-                modal.classList.add('visible');
-                overlay.setAttribute('aria-hidden', 'false');
+                overlay.addClass('visible');
+                modal.addClass('visible');
+                overlay.attr('aria-hidden', 'false');
                 setActiveTab('general');
                 loadDbMetadata();
             }
 
             function closeModal() {
-                overlay.classList.remove('visible');
-                modal.classList.remove('visible');
-                overlay.setAttribute('aria-hidden', 'true');
+                overlay.removeClass('visible');
+                modal.removeClass('visible');
+                overlay.attr('aria-hidden', 'true');
             }
 
-            openButton.addEventListener('click', function () {
+            openButton.on('click', function () {
                 openModal();
             });
 
-            if (closeButton) {
-                closeButton.addEventListener('click', function () {
+            if (closeButton.length) {
+                closeButton.on('click', function () {
                     closeModal();
                 });
             }
 
-            overlay.addEventListener('click', function (event) {
-                if (event.target === overlay) {
+            overlay.on('click', function (event) {
+                if (event.target === this) {
                     closeModal();
                 }
             });
 
-            document.addEventListener('keydown', function (event) {
-                if (event.key === 'Escape' && overlay.classList.contains('visible')) {
+            $(document).on('keydown', function (event) {
+                if (event.key === 'Escape' && overlay.hasClass('visible')) {
                     closeModal();
                 }
             });
 
-            tabButtons.forEach(function (button) {
-                button.addEventListener('click', function () {
-                    setActiveTab(button.getAttribute('data-tab'));
-                });
+            tabButtons.on('click', function () {
+                setActiveTab($(this).attr('data-tab'));
             });
         }
     </script>
