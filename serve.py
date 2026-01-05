@@ -403,7 +403,6 @@ def _truncate_text(value, max_length=2000):
 
 
 @app.route('/log/client-error', methods=['POST'])
-@limiter.limit("5 per minute; 50 per hour")
 def log_client_error():
     payload = request.get_json(silent=True) or {}
     if not isinstance(payload, dict):
