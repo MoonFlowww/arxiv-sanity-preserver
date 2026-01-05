@@ -109,12 +109,31 @@
 
         var ingestPoller = null;
         var ingestLogIndex = 0;
+        var ingestJobId = null;
         var recomputePoller = null;
         var recomputeLastStatus = null;
         function resetIngestState() {
-            resetIngestState();
             $('#ingest-status-text').text('Preparing to start the ingest process...');
-            $('#ingest-close').attr('aria-hidden', 'true').removeClass('is-visible').off('click');
+            $('#ingest-progress-bar').css('width', '0%');
+            $('.ingest-progress').attr('aria-valuenow', 0);
+            $('#ingest-log').empty();
+            ingestLogIndex = 0;
+            updateIngestButtonProgress('Preparing to start the ingest process...', 0);
+        }
+
+        function updateIngestButtonProgress(label, percent) {
+            $('#ingest-button-label').text(label);
+            $('#ingest-button-progress').css('width', percent + '%');
+        }
+
+        function setIngestButtonBusy(isBusy) {
+            var button = $('.ingest-submit');
+            button.toggleClass('is-busy', isBusy);
+            button.attr('aria-busy', isBusy ? 'true' : 'false');
+            button.find('.btn-progress').attr('aria-hidden', isBusy ? 'false' : 'true');
+            if (!isBusy) {
+                updateIngestButtonProgress('Preparing to start the ingest process...', 0);
+            }
         }
 
         function updateIngestProgress(step) {
@@ -125,19 +144,15 @@
             status.text(step.label);
             bar.css('width', step.percent + '%');
             progressShell.attr('aria-valuenow', step.percent);
+            updateIngestButtonProgress(step.label, step.percent);
         }
 
         function showIngestOverlay() {
-            var overlay = $('#ingest-overlay');
+            $('#ingest-overlay').attr('aria-hidden', 'false').addClass('visible');
+        }
 
-            if (ingestPoller) {
-                clearInterval(ingestPoller);
-            }
-            ingestLogIndex = 0;
-            updateIngestProgress({label: 'Preparing to start the ingest process...', percent: 0});
-            $('#ingest-log').empty();
-
-            overlay.attr('aria-hidden', 'false').addClass('visible');
+        function hideIngestOverlay() {
+            $('#ingest-overlay').attr('aria-hidden', 'true').removeClass('visible');
         }
 
         function pollIngestStatus(jobId) {
@@ -157,25 +172,17 @@
                     if (data.done) {
                         clearInterval(ingestPoller);
                         ingestPoller = null;
+                        ingestJobId = null;
+                        setIngestButtonBusy(false);
                         if (data.error) {
                             $('#ingest-status-text').text('Ingest failed');
                         }
-                        $('#ingest-close')
-                            .attr('aria-hidden', 'false')
-                            .addClass('is-visible')
-                            .off('click')
-                            .on('click', function () {
-                                $('#ingest-overlay').attr('aria-hidden', 'true').removeClass('visible');
-                                if (ingestPoller) {
-                                    clearInterval(ingestPoller);
-                                    ingestPoller = null;
-                                }
-                                resetIngestState();
-                            });
                     }
                 }).fail(function () {
                     clearInterval(ingestPoller);
                     ingestPoller = null;
+                    ingestJobId = null;
+                    setIngestButtonBusy(false);
                 });
             }, 1000);
         }
@@ -184,9 +191,15 @@
             var text = $('#recompute-status-text');
             var progress = $('#recompute-status-percent');
             var levelClass = level ? 'recompute-' + level : '';
+            var percentText = '—';
 
             text.text(message);
-            progress.text(percent + '%');
+            if (typeof percent === 'number') {
+                percentText = percent + '%';
+            } else if (typeof percent === 'string' && percent.trim()) {
+                percentText = percent;
+            }
+            progress.text(percentText);
             panel.removeClass('recompute-error recompute-info recompute-success');
             if (levelClass) {
                 panel.addClass(levelClass);
@@ -203,7 +216,7 @@
             var status = state.status || 'idle';
             recomputeLastStatus = status;
             var isActive = status === 'running' || status === 'queued';
-            var percent = typeof state.percent === 'number' ? state.percent : 0;
+            var percent = state.percent;
             var message = state.message || (status === 'queued' ? 'Recompute queued...' : 'Recomputing caches...');
 
             if (isActive) {
@@ -326,18 +339,29 @@
             if (ingestForm.length) {
                 ingestForm.on('submit', function (event) {
                     event.preventDefault();
+                    if (ingestJobId && ingestPoller) {
+                        showIngestOverlay();
+                        return;
+                    }
+                    resetIngestState();
                     showIngestOverlay();
+                    setIngestButtonBusy(true);
 
                     $.post('/ingest', ingestForm.serialize(), function (data) {
                         if (data.error) {
                             $('#ingest-status-text').text(data.error);
+                            setIngestButtonBusy(false);
+                            ingestJobId = null;
                             return;
                         }
                         if (data.job_id) {
-                            pollIngestStatus(data.job_id);
+                            ingestJobId = data.job_id;
+                            pollIngestStatus(ingestJobId);
                         }
                     }, 'json').fail(function () {
                         $('#ingest-status-text').text('Could not start ingest. Please try again.');
+                        setIngestButtonBusy(false);
+                        ingestJobId = null;
                     });
                 });
             }
@@ -345,6 +369,11 @@
 
             initLayoutToggle('.layout-btn');
             initThemeToggle();
+            $('#ingest-overlay').on('click', function (event) {
+                if (event.target === this) {
+                    hideIngestOverlay();
+                }
+            });
         });
 
     </script>
@@ -533,7 +562,15 @@
                     />
                 </div>
                 <p class="ingest-help">We will download the PDF, extract text, and refresh caches for the new paper.</p>
-                <button type="submit" class="btn-primary">Add paper</button>
+                <button type="submit" class="btn-primary ingest-submit" aria-busy="false">
+                    <span class="btn-label">Add paper</span>
+                    <span class="btn-progress" aria-hidden="true">
+                        <span class="btn-progress-label" id="ingest-button-label">Preparing to start the ingest process...</span>
+                        <span class="btn-progress-track">
+                            <span class="btn-progress-bar" id="ingest-button-progress"></span>
+                        </span>
+                    </span>
+                </button>
             </form>
             <div class="recompute-status-panel" id="recompute-status-panel" aria-hidden="true">
                 <div class="recompute-status-content">
@@ -592,9 +629,8 @@
     <div class="ingest-modal" role="dialog" aria-labelledby="ingest-modal-title" aria-describedby="ingest-status-text">
         <h3 id="ingest-modal-title">Adding new paper</h3>
         <p class="ingest-status" id="ingest-status-text">Preparing to start the ingest process...</p>
-        <button type="button" class="btn-secondary ingest-close" id="ingest-close" aria-hidden="true">Close</button>
-        <div class="ingest-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="8">
-            <div class="ingest-progress-bar" id="ingest-progress-bar" style="width: 8%;"></div>
+        <div class="ingest-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="ingest-progress-bar" id="ingest-progress-bar" style="width: 0%;"></div>
         </div>
         <div class="ingest-log" id="ingest-log" aria-live="polite"></div>
         <p class="ingest-note">We'll download the PDF, extract the text, and refresh caches. Feel free to keep this tab

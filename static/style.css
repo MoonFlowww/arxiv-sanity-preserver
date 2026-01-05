@@ -14,13 +14,7 @@ html.dark-mode body {
     background: #0f172a;
     color: #e2e8f0;
 }
-html.dark-mode .ts a:link, html.dark-mode .ts a:visited {
-    color: #e2e8f0;
-}
 
-html.dark-mode .ts a:hover {
-    color: #f8fafc;
-}
 /* LEGACY CLASSES - kept for JavaScript compatibility */
 .as {
     font-size: 14px;
@@ -55,6 +49,13 @@ html.dark-mode .ts a:hover {
 .ts a:hover {
     text-decoration: underline;
     color: #000;
+}
+html.dark-mode .ts a:link, html.dark-mode .ts a:visited {
+    color: #e2e8f0;
+}
+
+html.dark-mode .ts a:hover {
+    color: #f8fafc;
 }
 
 .cs a:link, .cs a:visited {
@@ -93,7 +94,7 @@ html.dark-mode .ts a:hover {
     border-radius: 5px;
     text-align: justify;
 }
-html.dark-mode .tt {
+html.dark-mode .apaper .tt {
     color: #e2e8f0;
     background-color: #111827;
 }
@@ -447,6 +448,11 @@ h1 {
     width: 100%;
     padding: 0.55rem;
     border-radius: 0.5rem;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
 }
 
 .ingest-help {
@@ -1305,14 +1311,51 @@ html.dark-mode ul.flashes li {
     font-weight: 600;
     color: #bfdbfe;
 }
-.ingest-close {
+.ingest-submit .btn-progress {
     display: none;
-    margin-top: 0.75rem;
+    flex-direction: column;
+    gap: 0.35rem;
+    width: 100%;
+    font-size: 0.8rem;
 }
 
-.ingest-close.is-visible {
+.ingest-submit .btn-label {
     display: inline-flex;
 }
+.ingest-submit.is-busy .btn-label {
+    display: none;
+}
+
+.ingest-submit.is-busy .btn-progress {
+    display: flex;
+}
+
+.btn-progress-label {
+    color: #e0f2fe;
+    text-align: center;
+}
+
+.btn-progress-track {
+    height: 6px;
+    width: 100%;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(30, 41, 59, 0.8);
+    overflow: hidden;
+}
+
+.btn-progress-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #38bdf8, #22c55e);
+    transition: width 0.4s ease;
+}
+
+.ingest-submit.is-busy {
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
+}
+
 .ingest-progress {
     margin-top: 0.75rem;
     width: 100%;
