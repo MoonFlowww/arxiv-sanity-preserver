@@ -369,6 +369,7 @@
 
             initLayoutToggle('.layout-btn');
             initThemeToggle();
+            initSettingsModal();
             $('#ingest-overlay').on('click', function (event) {
                 if (event.target === this) {
                     hideIngestOverlay();
@@ -387,6 +388,11 @@
     <div class="header-actions">
         <button type="button" class="theme-toggle" aria-label="Switch to dark mode" aria-pressed="false">
             <span class="theme-icon" aria-hidden="true">🌙</span>
+        </button>
+        <button type="button" class="settings-toggle" id="settings-toggle" aria-haspopup="dialog"
+                aria-controls="settings-overlay" aria-expanded="false">
+            <span class="settings-icon" aria-hidden="true">⚙️</span>
+            Settings
         </button>
     </div>
     <a href="/">
@@ -623,6 +629,45 @@
             <button id="loadmorebtn">Load more</button>
         </div>
     </main>
+</div>
+
+<div class="settings-overlay" id="settings-overlay" aria-hidden="true">
+    <div class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+        <div class="settings-header">
+            <h3 id="settings-modal-title">Settings</h3>
+            <button type="button" class="settings-close" aria-label="Close settings">×</button>
+        </div>
+        <div class="settings-tabs" role="tablist">
+            <button class="settings-tab is-active" role="tab" aria-selected="true"
+                    aria-controls="settings-panel-downloads" data-tab="downloads">Downloads</button>
+            <button class="settings-tab" role="tab" aria-selected="false"
+                    aria-controls="settings-panel-stats" data-tab="stats">Stats</button>
+            <button class="settings-tab" role="tab" aria-selected="false"
+                    aria-controls="settings-panel-time-range" data-tab="time-range">Time Range</button>
+            <button class="settings-tab" role="tab" aria-selected="false"
+                    aria-controls="settings-panel-thumbnails" data-tab="thumbnails">Thumbnails</button>
+            <button class="settings-tab" role="tab" aria-selected="false"
+                    aria-controls="settings-panel-storage" data-tab="storage">Storage</button>
+        </div>
+        <div class="settings-panels">
+            <section class="settings-panel is-active" role="tabpanel" id="settings-panel-downloads"
+                     data-panel="downloads">
+                <p>Manage download defaults, auto-open behavior, and preferred formats.</p>
+            </section>
+            <section class="settings-panel" role="tabpanel" id="settings-panel-stats" data-panel="stats">
+                <p>Control how stats are displayed, refreshed, and filtered.</p>
+            </section>
+            <section class="settings-panel" role="tabpanel" id="settings-panel-time-range" data-panel="time-range">
+                <p>Pick the default time window used for searches and filters.</p>
+            </section>
+            <section class="settings-panel" role="tabpanel" id="settings-panel-thumbnails" data-panel="thumbnails">
+                <p>Toggle thumbnail visibility, sizing, and hover previews.</p>
+            </section>
+            <section class="settings-panel" role="tabpanel" id="settings-panel-storage" data-panel="storage">
+                <p>Review storage usage and clear cached thumbnails or downloads.</p>
+            </section>
+        </div>
+    </div>
 </div>
 
 <div class="ingest-overlay" id="ingest-overlay" aria-hidden="true">

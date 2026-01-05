@@ -75,6 +75,76 @@ function initLayoutToggle(buttonSelector) {
     updateToggleState(appliedInitial);
 }
 
+function initSettingsModal() {
+    var overlay = $('#settings-overlay');
+    var toggleButton = $('#settings-toggle');
+    if (!overlay.length || !toggleButton.length) {
+        return;
+    }
+
+    var closeButton = overlay.find('.settings-close');
+    var tabButtons = overlay.find('.settings-tab');
+    var panels = overlay.find('.settings-panel');
+
+    function setActiveTab(tabId) {
+        var activeTab = tabId || tabButtons.first().data('tab');
+        tabButtons.each(function () {
+            var button = $(this);
+            var isActive = button.data('tab') === activeTab;
+            button.toggleClass('is-active', isActive);
+            button.attr('aria-selected', isActive ? 'true' : 'false');
+        });
+        panels.each(function () {
+            var panel = $(this);
+            var isActive = panel.data('panel') === activeTab;
+            panel.toggleClass('is-active', isActive);
+            if (isActive) {
+                panel.removeAttr('hidden');
+            } else {
+                panel.attr('hidden', 'hidden');
+            }
+        });
+    }
+
+    function showSettings() {
+        overlay.addClass('visible').attr('aria-hidden', 'false');
+        toggleButton.attr('aria-expanded', 'true');
+        setActiveTab(tabButtons.filter('.is-active').data('tab'));
+    }
+
+    function hideSettings() {
+        overlay.removeClass('visible').attr('aria-hidden', 'true');
+        toggleButton.attr('aria-expanded', 'false');
+    }
+
+    toggleButton.on('click', function () {
+        showSettings();
+    });
+
+    closeButton.on('click', function () {
+        hideSettings();
+    });
+
+    overlay.on('click', function (event) {
+        if (event.target === overlay[0]) {
+            hideSettings();
+        }
+    });
+
+    $(document).on('keydown', function (event) {
+        if (event.key === 'Escape' && overlay.hasClass('visible')) {
+            hideSettings();
+        }
+    });
+
+    tabButtons.on('click', function () {
+        setActiveTab($(this).data('tab'));
+    });
+
+    setActiveTab(tabButtons.filter('.is-active').data('tab'));
+}
+
+
 function jq(myid) {
     return myid.replace(/(:|\.|\[|\]|,)/g, "\\$1");
 } // for dealing with ids that have . in them

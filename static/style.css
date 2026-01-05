@@ -173,6 +173,28 @@ h1 {
     align-items: center;
     justify-content: center;
 }
+.settings-toggle {
+    border: 1px solid #374151;
+    background: transparent;
+    color: #f9fafb;
+    padding: 0.35rem 0.75rem;
+    border-radius: 0.4rem;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.settings-toggle:hover {
+    background: #1f2937;
+}
+
+.settings-icon {
+    font-size: 1rem;
+    line-height: 1;
+}
 /* USER INFO */
 #userinfo {
     position: static;
@@ -1273,6 +1295,116 @@ html.dark-mode ul.flashes li {
     padding: 10px 4px 0px 4px;
     font-size: 14px;
     border-radius: 0.4rem;
+}
+
+/* SETTINGS MODAL */
+.settings-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.6);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 2100;
+    padding: 1.5rem;
+}
+
+.settings-overlay.visible {
+    display: flex;
+}
+
+.settings-modal {
+    width: min(720px, 95vw);
+    background: #f8fafc;
+    color: #0f172a;
+    border-radius: 0.85rem;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.2);
+    padding: 1.5rem;
+}
+
+html.dark-mode .settings-modal {
+    background: #0b1224;
+    color: #e2e8f0;
+    border-color: #1f2937;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+.settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.settings-header h3 {
+    margin: 0;
+    font-size: 1.2rem;
+}
+
+.settings-close {
+    border: none;
+    background: transparent;
+    color: inherit;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0.1rem 0.35rem;
+    border-radius: 0.4rem;
+}
+
+.settings-close:hover {
+    background: rgba(148, 163, 184, 0.2);
+}
+
+.settings-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 0.75rem;
+}
+
+html.dark-mode .settings-tabs {
+    border-bottom-color: #1f2937;
+}
+
+.settings-tab {
+    border: 1px solid transparent;
+    background: #e2e8f0;
+    color: #1e293b;
+    padding: 0.4rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+}
+
+html.dark-mode .settings-tab {
+    background: #1f2937;
+    color: #e2e8f0;
+}
+
+.settings-tab.is-active {
+    background: #2563eb;
+    color: #fff;
+    border-color: #1d4ed8;
+}
+
+.settings-panels {
+    padding-top: 1rem;
+}
+
+.settings-panel {
+    display: none;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    color: inherit;
+}
+
+.settings-panel.is-active {
+    display: block;
 }
 
 /* INGEST MODAL */
