@@ -954,6 +954,7 @@ def recompute_status_endpoint():
     return jsonify({
         'status': status.get('status'),
         'message': status.get('message'),
+        'percent': status.get('percent'),
         'updated_at': status.get('updated_at'),
         'error': status.get('error'),
     })
