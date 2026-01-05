@@ -91,6 +91,66 @@
                 setLabel();
             });
         }
+        function initSettingsModal() {
+            var openButton = document.querySelector('.settings-toggle');
+            var overlay = document.getElementById('settings-overlay');
+            if (!openButton || !overlay) {
+                return;
+            }
+            var closeButton = overlay.querySelector('.settings-close');
+            var tabButtons = overlay.querySelectorAll('.settings-tab');
+            var tabPanels = overlay.querySelectorAll('.settings-panel');
+
+            var showOverlay = function () {
+                overlay.classList.add('visible');
+                overlay.setAttribute('aria-hidden', 'false');
+                if (tabButtons.length) {
+                    tabButtons[0].focus();
+                }
+            };
+
+            var hideOverlay = function () {
+                overlay.classList.remove('visible');
+                overlay.setAttribute('aria-hidden', 'true');
+                openButton.focus();
+            };
+
+            var setActiveTab = function (targetId) {
+                tabButtons.forEach(function (button) {
+                    var isActive = button.getAttribute('data-tab') === targetId;
+                    button.classList.toggle('active', isActive);
+                    button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                });
+                tabPanels.forEach(function (panel) {
+                    var isActive = panel.id === targetId;
+                    panel.classList.toggle('active', isActive);
+                    panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+                });
+            };
+
+            openButton.addEventListener('click', showOverlay);
+            closeButton.addEventListener('click', hideOverlay);
+            overlay.addEventListener('click', function (event) {
+                if (event.target === overlay) {
+                    hideOverlay();
+                }
+            });
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape' && overlay.classList.contains('visible')) {
+                    hideOverlay();
+                }
+            });
+
+            tabButtons.forEach(function (button) {
+                button.addEventListener('click', function () {
+                    setActiveTab(button.getAttribute('data-tab'));
+                });
+            });
+
+            if (tabButtons.length) {
+                setActiveTab(tabButtons[0].getAttribute('data-tab'));
+            }
+        }
     </script>
 
     <script>
@@ -369,6 +429,7 @@
 
             initLayoutToggle('.layout-btn');
             initThemeToggle();
+            initSettingsModal();
             $('#ingest-overlay').on('click', function (event) {
                 if (event.target === this) {
                     hideIngestOverlay();
@@ -385,6 +446,9 @@
 <div id="titdiv">
     <!-- Site information/banner -->
     <div class="header-actions">
+        <button type="button" class="settings-toggle" aria-haspopup="dialog">
+            Settings
+        </button>
         <button type="button" class="theme-toggle" aria-label="Switch to dark mode" aria-pressed="false">
             <span class="theme-icon" aria-hidden="true">🌙</span>
         </button>
@@ -635,6 +699,81 @@
         <div class="ingest-log" id="ingest-log" aria-live="polite"></div>
         <p class="ingest-note">We'll download the PDF, extract the text, and refresh caches. Feel free to keep this tab
             open while we work.</p>
+    </div>
+</div>
+<div class="settings-overlay" id="settings-overlay" aria-hidden="true">
+    <div class="settings-modal" role="dialog" aria-labelledby="settings-title" aria-describedby="settings-description">
+        <div class="settings-header">
+            <h3 id="settings-title">Settings</h3>
+            <button type="button" class="settings-close" aria-label="Close settings">✕</button>
+        </div>
+        <p class="settings-description" id="settings-description">
+            Tune your experience. Changes are saved automatically on this device.
+        </p>
+        <div class="settings-tabs" role="tablist" aria-label="Settings tabs">
+            <button type="button" class="settings-tab" role="tab" data-tab="settings-general">General</button>
+            <button type="button" class="settings-tab" role="tab" data-tab="settings-download">Download</button>
+            <button type="button" class="settings-tab" role="tab" data-tab="settings-storage">Storage</button>
+            <button type="button" class="settings-tab" role="tab" data-tab="settings-stats">Stats</button>
+        </div>
+        <div class="settings-panels">
+            <section class="settings-panel" id="settings-general" role="tabpanel" aria-hidden="true">
+                <h4>General</h4>
+                <div class="settings-card">
+                    <p>Choose the defaults that appear when you open the site.</p>
+                    <div class="settings-row">
+                        <span>Default layout</span>
+                        <span class="settings-value">Two-column</span>
+                    </div>
+                    <div class="settings-row">
+                        <span>Theme</span>
+                        <span class="settings-value">System</span>
+                    </div>
+                </div>
+            </section>
+            <section class="settings-panel" id="settings-download" role="tabpanel" aria-hidden="true">
+                <h4>Download</h4>
+                <div class="settings-card">
+                    <p>Manage PDF behavior and export preferences.</p>
+                    <div class="settings-row">
+                        <span>Auto-download PDFs</span>
+                        <span class="settings-value">Off</span>
+                    </div>
+                    <div class="settings-row">
+                        <span>Save location</span>
+                        <span class="settings-value">~/Downloads</span>
+                    </div>
+                </div>
+            </section>
+            <section class="settings-panel" id="settings-storage" role="tabpanel" aria-hidden="true">
+                <h4>Storage</h4>
+                <div class="settings-card">
+                    <p>Review cached content and reclaim space.</p>
+                    <div class="settings-row">
+                        <span>Cached papers</span>
+                        <span class="settings-value">1,284 items</span>
+                    </div>
+                    <div class="settings-row">
+                        <span>Storage used</span>
+                        <span class="settings-value">2.4 GB</span>
+                    </div>
+                </div>
+            </section>
+            <section class="settings-panel" id="settings-stats" role="tabpanel" aria-hidden="true">
+                <h4>Stats</h4>
+                <div class="settings-card">
+                    <p>Track your reading momentum.</p>
+                    <div class="settings-row">
+                        <span>Daily papers read</span>
+                        <span class="settings-value">6</span>
+                    </div>
+                    <div class="settings-row">
+                        <span>Saved papers</span>
+                        <span class="settings-value">42</span>
+                    </div>
+                </div>
+            </section>
+        </div>
     </div>
 </div>
 
