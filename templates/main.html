@@ -362,7 +362,9 @@
                 showRecomputePanel(message, percent, 'info');
             } else {
                 hideRecomputePanel();
-                updateRecomputeBadge(status === 'finished');
+                if (typeof updateRecomputeBadge === 'function') {
+                    updateRecomputeBadge(status === 'finished');
+                }
             }
 
 
