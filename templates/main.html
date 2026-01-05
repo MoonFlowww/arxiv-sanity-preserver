@@ -521,6 +521,7 @@
             initLayoutToggle('.layout-btn');
             initThemeToggle();
             initSettingsModal();
+            initStatusPopup();
             $('#ingest-overlay').on('click', function (event) {
                 if (event.target === this) {
                     hideIngestOverlay();
@@ -536,6 +537,16 @@
 <!-- HEADER -->
 <div id="titdiv">
     <!-- Site information/banner -->
+    <div class="status-control">
+        <button type="button" id="status-icon-button" class="status-icon-button" aria-label="Open status panel"
+                aria-haspopup="true" aria-expanded="false" aria-controls="status-popup">
+            <span class="status-icon" aria-hidden="true">ℹ️</span>
+        </button>
+        <div id="status-popup" class="status-popup" role="dialog" aria-hidden="true">
+            <p class="status-popup-title">System status</p>
+            <p class="status-popup-body">All services are running normally.</p>
+        </div>
+    </div>
     <div class="header-actions">
         <button type="button" class="settings-toggle" aria-label="Open settings" aria-haspopup="dialog"
                 aria-controls="settings-overlay">

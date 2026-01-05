@@ -86,6 +86,54 @@ function updateRecomputeBadge(isFinished) {
     badge.attr('aria-hidden', finished ? 'true' : 'false');
 }
 
+function initStatusPopup() {
+    var button = document.getElementById('status-icon-button');
+    var popup = document.getElementById('status-popup');
+    if (!button || !popup) {
+        return;
+    }
+
+    function closePopup() {
+        popup.classList.remove('is-visible');
+        popup.setAttribute('aria-hidden', 'true');
+        button.setAttribute('aria-expanded', 'false');
+    }
+
+    function openPopup() {
+        popup.classList.add('is-visible');
+        popup.setAttribute('aria-hidden', 'false');
+        button.setAttribute('aria-expanded', 'true');
+    }
+
+    function togglePopup() {
+        if (popup.classList.contains('is-visible')) {
+            closePopup();
+        } else {
+            openPopup();
+        }
+    }
+
+    button.addEventListener('click', function (event) {
+        event.stopPropagation();
+        togglePopup();
+    });
+
+    document.addEventListener('click', function (event) {
+        if (!popup.classList.contains('is-visible')) {
+            return;
+        }
+        if (popup.contains(event.target) || button.contains(event.target)) {
+            return;
+        }
+        closePopup();
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && popup.classList.contains('is-visible')) {
+            closePopup();
+        }
+    });
+}
 
 function jq(myid) {
     return myid.replace(/(:|\.|\[|\]|,)/g, "\\$1");
