@@ -149,20 +149,42 @@ function initHealthPanel() {
     }
 
     function updateHealthPanel(data) {
-        var db = data.database || {};
-        var dbStatus = 'DB: ' + (db.selected_db || 'Unknown');
+        var db = data.db || data.database || {};
+        var dbLabel = db.db_serve_path || db.selected_db || 'Unknown';
+        var dbStatus = 'DB: ' + dbLabel;
         if (typeof db.total_papers === 'number') {
             dbStatus += ' • Papers: ' + db.total_papers;
         }
+        if (db.record_counts && typeof db.record_counts.papers === 'number') {
+            dbStatus += ' • Records: ' + db.record_counts.papers;
+        }
         if (typeof db.downloaded_percent === 'number') {
             dbStatus += ' • PDFs: ' + db.downloaded_percent + '%';
+        }
+        if (db.record_counts && typeof db.record_counts.date_sorted_pids === 'number') {
+            dbStatus += ' • Date Sorted: ' + db.record_counts.date_sorted_pids;
+        }
+        if (db.record_counts && typeof db.record_counts.top_sorted_pids === 'number') {
+            dbStatus += ' • Top Sorted: ' + db.record_counts.top_sorted_pids;
         }
         $('#health-db-status').text(dbStatus);
 
         var site = data.site || {};
         var siteStatus = 'Uptime: ' + formatUptime(site.uptime_seconds);
-        if (site.recompute_status) {
-            siteStatus += ' • Recompute: ' + site.recompute_status;
+        var recompute = site.recompute_status || {};
+        if (typeof recompute === 'string') {
+            siteStatus += ' • Recompute: ' + recompute;
+        } else if (recompute && typeof recompute === 'object') {
+            var recomputeState = recompute.status || recompute.state;
+            if (recomputeState) {
+                siteStatus += ' • Recompute: ' + recomputeState;
+            }
+            if (recompute.message) {
+                siteStatus += ' • ' + recompute.message;
+            }
+            if (typeof recompute.percent === 'number') {
+                siteStatus += ' • ' + recompute.percent + '%';
+            }
         }
         if (site.recompute_message) {
             siteStatus += ' • ' + site.recompute_message;
@@ -170,7 +192,8 @@ function initHealthPanel() {
         $('#health-site-status').text(siteStatus);
 
         var network = data.network || {};
-        var networkStatus = network.reachable ? 'Online' : 'Offline';
+        var networkState = network.state || (network.reachable ? 'online' : 'offline');
+        var networkStatus = networkState ? networkState.charAt(0).toUpperCase() + networkState.slice(1) : 'Unknown';
         if (network.ip) {
             networkStatus += ' • IP: ' + network.ip;
         }
