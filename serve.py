@@ -1122,6 +1122,7 @@ def ingest_recompute_status():
 @app.route('/recompute/status')
 def recompute_status_endpoint():
     status = _get_recompute_status()
+    progress = None
     if status.get('status') in {'running', 'queued'}:
         progress = _parse_recompute_progress(status.get('stdout_path', recompute_stdout_path))
     if progress:
