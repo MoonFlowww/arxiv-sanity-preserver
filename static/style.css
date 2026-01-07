@@ -1587,7 +1587,7 @@ html.dark-mode ul.flashes li {
 }
 
 .settings-topic-list {
-    max-height: 160px;
+    max-height: 260px;
     overflow-y: auto;
     padding: 0.5rem;
     background: rgba(15, 23, 42, 0.25);
@@ -1601,7 +1601,7 @@ html.dark-mode ul.flashes li {
 
 
 .settings-selected-list {
-    max-height: 160px;
+    max-height: 260px;
     overflow-y: auto;
     padding: 0.5rem;
     background: rgba(15, 23, 42, 0.25);

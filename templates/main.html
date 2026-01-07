@@ -862,18 +862,22 @@
                         <div class="settings-topic-picker">
                             <div class="settings-topic-section">
                                 <div class="settings-topic-section-title">Available topics</div>
-                                <div class="tag-list limited settings-topic-list" id="settings-topic-tags">
-                                    {% for topic in settings_download_topics %}
-                                    <label class="tag settings-topic-tag">
-                                        <input type="checkbox" name="download_topics[]" value="{{ topic.name }}" {% if topic.selected %}checked{% endif %}>
-                                        <span data-full-name="{{ topic.display_name }}" title="{{ topic.display_name }}">{{ topic.display_name }}</span>
-                                    </label>
-                                    {% endfor %}
+                                <div class="topic-cluster">
+                                    <div class="tag-list limited settings-topic-list" id="settings-topic-tags">
+                                        {% for topic in settings_download_topics %}
+                                        <label class="tag settings-topic-tag">
+                                            <input type="checkbox" name="download_topics[]" value="{{ topic.name }}" {% if topic.selected %}checked{% endif %}>
+                                            <span data-full-name="{{ topic.display_name }}" title="{{ topic.display_name }}">{{ topic.display_name }}</span>
+                                        </label>
+                                        {% endfor %}
+                                    </div>
                                 </div>
                             </div>
                             <div class="settings-topic-section">
                                 <div class="settings-topic-section-title">Selected topics</div>
-                                <div class="tag-list limited settings-selected-list" id="settings-selected-topics" aria-live="polite"></div>
+                                <div class="topic-cluster">
+                                    <div class="tag-list limited settings-selected-list" id="settings-selected-topics" aria-live="polite"></div>
+                                </div>
                             </div>
                             <button type="button" class="settings-button settings-save-button">Save selections</button>
                         </div>
