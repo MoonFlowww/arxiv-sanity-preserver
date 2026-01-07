@@ -157,6 +157,9 @@
                 overlay.classList.remove('visible');
                 overlay.setAttribute('aria-hidden', 'true');
                 openButton.focus();
+                if (window.resetSettingsTopicSearch) {
+                    window.resetSettingsTopicSearch();
+                }
             };
 
             var setActiveTab = function (targetId) {
@@ -473,6 +476,8 @@
 
             var topicSearch = $("#topic-search");
             var topicTags = $("#topic-tags");
+            var settingsTopicSearch = $("#settings-topic-search");
+            var settingsTopicList = $(".settings-topic-list");
 
             if (topicTags.length && topicSearch.length) {
                 var tags = topicTags.find('.tag');
@@ -491,6 +496,31 @@
                         topicTags.addClass('limited');
                     }
                 });
+            }
+            if (settingsTopicSearch.length && settingsTopicList.length) {
+                var settingsTags = settingsTopicList.find('.tag');
+                var resetSettingsTopicSearch = function () {
+                    settingsTopicSearch.val('');
+                    settingsTags.show();
+                    settingsTopicList.addClass('limited');
+                };
+
+                settingsTopicSearch.on('input', function () {
+                    var query = $(this).val().toLowerCase().trim();
+
+                    if (query === '') {
+                        settingsTags.show();
+                        settingsTopicList.addClass('limited');
+                    } else {
+                        settingsTags.each(function () {
+                            var text = $(this).text().toLowerCase();
+                            $(this).toggle(text.indexOf(query) !== -1);
+                        });
+                        settingsTopicList.addClass('limited');
+                    }
+                });
+
+                window.resetSettingsTopicSearch = resetSettingsTopicSearch;
             }
 
             var filterForm = $('.filter-form');
@@ -863,6 +893,13 @@
                             <div class="settings-topic-section">
                                 <div class="settings-topic-section-title">Available topics</div>
                                 <div class="topic-cluster">
+                                    <input
+                                            type="search"
+                                            id="settings-topic-search"
+                                            class="topic-search"
+                                            placeholder="Search topics..."
+                                            autocomplete="off"
+                                    />
                                     <div class="tag-list limited settings-topic-list" id="settings-topic-tags">
                                         {% for topic in settings_download_topics %}
                                         <label class="tag settings-topic-tag">
