@@ -205,6 +205,7 @@
             }
             var topicInputs = topicContainer.querySelectorAll('input[type="checkbox"]');
             var rows = document.querySelectorAll('.settings-download-row');
+            var selectedContainer = document.getElementById('settings-selected-topics');
             var updateRows = function () {
                 rows.forEach(function (row) {
                     var topicValue = row.getAttribute('data-topic');
@@ -213,10 +214,38 @@
                     row.classList.toggle('is-hidden', !isChecked);
                 });
             };
+            var renderSelectedTopics = function () {
+                if (!selectedContainer) {
+                    return;
+                }
+                selectedContainer.innerHTML = '';
+                var selectedInputs = Array.prototype.filter.call(topicInputs, function (input) {
+                    return input.checked;
+                });
+                if (!selectedInputs.length) {
+                    var empty = document.createElement('span');
+                    empty.className = 'settings-topic-empty';
+                    empty.textContent = 'No topics selected';
+                    selectedContainer.appendChild(empty);
+                    return;
+                }
+                selectedInputs.forEach(function (input) {
+                    var label = input.closest('label');
+                    var labelSpan = label ? label.querySelector('span') : null;
+                    var chip = document.createElement('span');
+                    chip.className = 'settings-chip selected';
+                    chip.textContent = labelSpan ? labelSpan.textContent : input.value;
+                    selectedContainer.appendChild(chip);
+                });
+            };
             topicInputs.forEach(function (input) {
-                input.addEventListener('change', updateRows);
+                input.addEventListener('change', function () {
+                    updateRows();
+                    renderSelectedTopics();
+                });
             });
             updateRows();
+            renderSelectedTopics();
 
             var saveButton = document.querySelector('.settings-save-button');
             if (saveButton && !saveButton.dataset.bound) {
@@ -831,13 +860,20 @@
                     <div class="settings-row settings-row-stack">
                         <span>arXiv databases</span>
                         <div class="settings-topic-picker">
-                            <div class="tag-list limited settings-topic-list" id="settings-topic-tags">
-                                {% for topic in settings_download_topics %}
-                                <label class="tag settings-topic-tag">
-                                    <input type="checkbox" name="download_topics[]" value="{{ topic.name }}" {% if topic.selected %}checked{% endif %}>
-                                    <span data-full-name="{{ topic.display_name }}" title="{{ topic.display_name }}">{{ topic.display_name }}</span>
-                                </label>
-                                {% endfor %}
+                            <div class="settings-topic-section">
+                                <div class="settings-topic-section-title">Available topics</div>
+                                <div class="tag-list limited settings-topic-list" id="settings-topic-tags">
+                                    {% for topic in settings_download_topics %}
+                                    <label class="tag settings-topic-tag">
+                                        <input type="checkbox" name="download_topics[]" value="{{ topic.name }}" {% if topic.selected %}checked{% endif %}>
+                                        <span data-full-name="{{ topic.display_name }}" title="{{ topic.display_name }}">{{ topic.display_name }}</span>
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="settings-topic-section">
+                                <div class="settings-topic-section-title">Selected topics</div>
+                                <div class="tag-list limited settings-selected-list" id="settings-selected-topics" aria-live="polite"></div>
                             </div>
                             <button type="button" class="settings-button settings-save-button">Save selections</button>
                         </div>
