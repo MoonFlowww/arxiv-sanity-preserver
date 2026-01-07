@@ -82,6 +82,7 @@
                     : '<span class="theme-icon" aria-hidden="true">🌙</span>';
                 toggleButton.setAttribute('aria-pressed', isDark ? 'true' : 'false');
                 toggleButton.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+                updateSettingsPanelValues();
             };
             setLabel();
             toggleButton.addEventListener('click', function () {
@@ -90,6 +91,45 @@
                 setStoredTheme(isDark ? 'dark' : 'light');
                 setLabel();
             });
+        }
+        function updateSettingsPanelValues() {
+            var layoutValue = document.getElementById('settings-layout-value');
+            var themeValue = document.getElementById('settings-theme-value');
+            var endDateValue = document.getElementById('settings-end-date');
+            var todayButton = document.getElementById('settings-today-button');
+
+            if (layoutValue) {
+                var storedLayout = null;
+                try {
+                    storedLayout = localStorage.getItem('preferredLayout');
+                } catch (e) {
+                }
+                var layoutChoice = storedLayout;
+                if (!layoutChoice) {
+                    var rtable = document.getElementById('rtable');
+                    layoutChoice = rtable ? rtable.getAttribute('data-layout') : null;
+                }
+                layoutChoice = layoutChoice === 'single' ? 'single' : 'double';
+                layoutValue.textContent = layoutChoice === 'single' ? 'Single-column' : 'Two-column';
+            }
+
+            if (themeValue) {
+                var storedTheme = getStoredTheme();
+                if (!storedTheme) {
+                    themeValue.textContent = 'System';
+                } else {
+                    themeValue.textContent = storedTheme === 'dark' ? 'Dark' : 'Light';
+                }
+            }
+
+            if (todayButton && endDateValue && !todayButton.dataset.bound) {
+                todayButton.addEventListener('click', function () {
+                    var today = new Date();
+                    var formatted = today.toISOString().slice(0, 10);
+                    endDateValue.textContent = formatted;
+                });
+                todayButton.dataset.bound = 'true';
+            }
         }
         function initSettingsModal() {
             var openButton = document.querySelector('.settings-toggle');
@@ -437,6 +477,8 @@
             initLayoutToggle('.layout-btn');
             initThemeToggle();
             initSettingsModal();
+            updateSettingsPanelValues();
+            $('.layout-btn').on('click', updateSettingsPanelValues);
             $('#ingest-overlay').on('click', function (event) {
                 if (event.target === this) {
                     hideIngestOverlay();
@@ -730,25 +772,49 @@
                     <p>Choose the defaults that appear when you open the site.</p>
                     <div class="settings-row">
                         <span>Default layout</span>
-                        <span class="settings-value">Two-column</span>
+                        <span class="settings-value" id="settings-layout-value">Two-column</span>
                     </div>
                     <div class="settings-row">
                         <span>Theme</span>
-                        <span class="settings-value">System</span>
+                        <span class="settings-value" id="settings-theme-value">System</span>
                     </div>
                 </div>
             </section>
             <section class="settings-panel" id="settings-download" role="tabpanel" aria-hidden="true">
                 <h4>Download</h4>
                 <div class="settings-card">
-                    <p>Manage PDF behavior and export preferences.</p>
+                    <p>Manage arXiv exports and download defaults.</p>
                     <div class="settings-row">
                         <span>Auto-download PDFs</span>
-                        <span class="settings-value">Off</span>
+                        <span class="settings-value">Manual (on ingest)</span>
                     </div>
                     <div class="settings-row">
                         <span>Save location</span>
-                        <span class="settings-value">~/Downloads</span>
+                        <span class="settings-value">{{ settings_download_dir }}</span>
+                    </div>
+                    <div class="settings-row settings-row-stack">
+                        <span>arXiv databases</span>
+                        <div class="settings-list">
+                            {% for topic in settings_download_topics %}
+                            <span class="settings-chip {% if topic.selected %}selected{% endif %}">
+                                {{ topic.display_name }}
+                                {% if topic.selected %}
+                                <span class="settings-chip-status">Selected</span>
+                                {% endif %}
+                            </span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span>First paper date</span>
+                        <span class="settings-value">{{ settings_date_range.start }}</span>
+                    </div>
+                    <div class="settings-row">
+                        <span>Latest paper date</span>
+                        <span class="settings-value">
+                            <span id="settings-end-date">{{ settings_date_range.end }}</span>
+                            <button type="button" class="settings-button" id="settings-today-button">Today</button>
+                        </span>
                     </div>
                 </div>
             </section>
@@ -758,25 +824,36 @@
                     <p>Review cached content and reclaim space.</p>
                     <div class="settings-row">
                         <span>Cached papers</span>
-                        <span class="settings-value">1,284 items</span>
+                        <span class="settings-value">{{ "{:,}".format(settings_storage_papers) }} items</span>
                     </div>
                     <div class="settings-row">
                         <span>Storage used</span>
-                        <span class="settings-value">2.4 GB</span>
+                        <span class="settings-value">{{ settings_storage_used }}</span>
                     </div>
                 </div>
             </section>
             <section class="settings-panel" id="settings-stats" role="tabpanel" aria-hidden="true">
                 <h4>Stats</h4>
                 <div class="settings-card">
-                    <p>Track your reading momentum.</p>
-                    <div class="settings-row">
-                        <span>Daily papers read</span>
-                        <span class="settings-value">6</span>
-                    </div>
-                    <div class="settings-row">
-                        <span>Saved papers</span>
-                        <span class="settings-value">42</span>
+                    <p>Category coverage across the database.</p>
+                    <div class="settings-row settings-row-stack">
+                        <span>Per-category metrics</span>
+                        <div class="settings-table">
+                            <div class="settings-table-row settings-table-header">
+                                <span>Category</span>
+                                <span>Papers</span>
+                                <span>Citations</span>
+                                <span>Avg score</span>
+                            </div>
+                            {% for row in settings_topic_stats %}
+                            <div class="settings-table-row">
+                                <span>{{ row.display_name }}</span>
+                                <span>{{ row.paper_count_display }}</span>
+                                <span>{{ row.citations_total_display }}</span>
+                                <span>{{ row.avg_score_display }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
                     </div>
                 </div>
             </section>

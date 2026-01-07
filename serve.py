@@ -53,6 +53,8 @@ RECOMPUTE_STALE_SECONDS = 30 * 60
 # topic browsing globals
 TOPIC_PIDS = {}
 TOPICS = []
+SETTINGS_DATE_RANGE = {'start': '—', 'end': '—'}
+SETTINGS_TOPIC_STATS = []
 
 SECONDS_PER_YEAR = 365.25 * 24 * 60 * 60
 
@@ -189,6 +191,68 @@ def translate_topic_name(topic_code):
     return TOPIC_TRANSLATIONS.get(topic_code, topic_code)
 
 
+def _format_score(value):
+    if value is None:
+        return '—'
+    return f'{value:.3f}'
+
+
+def _build_date_range(paper_db):
+    timestamps = [paper.get('time_published') for paper in paper_db.values() if paper.get('time_published')]
+    if not timestamps:
+        return {'start': '—', 'end': '—'}
+    start_ts = min(timestamps)
+    end_ts = max(timestamps)
+    return {
+        'start': time.strftime('%Y-%m-%d', time.gmtime(start_ts)),
+        'end': time.strftime('%Y-%m-%d', time.gmtime(end_ts)),
+    }
+
+
+def _build_topic_stats(paper_db, topic_pids):
+    stats = []
+    for topic, pids in topic_pids.items():
+        citation_sum = 0
+        scores = []
+        for pid in pids:
+            paper = paper_db.get(pid)
+            if not paper:
+                continue
+            citation_sum += paper.get('citation_count', 0) or 0
+            score = paper.get('impact_score')
+            if score is not None:
+                scores.append(score)
+        avg_score = sum(scores) / len(scores) if scores else None
+        stats.append({
+            'display_name': translate_topic_name(topic),
+            'paper_count': len(pids),
+            'paper_count_display': f'{len(pids):,}',
+            'citations_total': citation_sum,
+            'citations_total_display': f'{citation_sum:,}',
+            'avg_score': avg_score,
+            'avg_score_display': _format_score(avg_score),
+        })
+    stats.sort(key=lambda row: row['display_name'])
+    return stats
+
+
+def _get_storage_usage(download_dir):
+    if not os.path.isdir(download_dir):
+        return '0 B'
+    try:
+        result = subprocess.run(
+            ['du', '-sh', download_dir],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return 'Unknown'
+    output = result.stdout.strip()
+    if not output:
+        return '0 B'
+    return output.split()[0]
+
 def _build_topics(paper_db, date_sorted_pids):
     topic_pids = {}
     for pid in date_sorted_pids:
@@ -210,6 +274,7 @@ def _refresh_serving_data():
     global db, vocab, idf, sim_dict, user_sim
     global DATE_SORTED_PIDS, TOP_SORTED_PIDS, SEARCH_DICT
     global TOPIC_PIDS, TOPICS
+    global SETTINGS_DATE_RANGE, SETTINGS_TOPIC_STATS
 
     print('loading the paper database', Config.db_serve_path)
     new_db = pickle.load(open(Config.db_serve_path, 'rb'))
@@ -236,6 +301,8 @@ def _refresh_serving_data():
 
     print('building topic index')
     new_topic_pids, new_topics = _build_topics(new_db, new_date_sorted_pids)
+    new_settings_date_range = _build_date_range(new_db)
+    new_settings_topic_stats = _build_topic_stats(new_db, new_topic_pids)
 
     with data_lock:
         db = new_db
@@ -248,6 +315,8 @@ def _refresh_serving_data():
         SEARCH_DICT = new_search_dict
         TOPIC_PIDS = new_topic_pids
         TOPICS = new_topics
+        SETTINGS_DATE_RANGE = new_settings_date_range
+        SETTINGS_TOPIC_STATS = new_settings_topic_stats
 
 
 # -----------------------------------------------------------------------------
@@ -680,6 +749,15 @@ def encode_json(ps, n=10, send_images=True, send_abstracts=True):
 
 def default_context(papers, **kws):
     top_papers = encode_json(papers, args.num_results)
+    selected_topics = kws.get('selected_topics', [])
+    download_dir = os.path.abspath(Config.pdf_dir)
+    settings_topics = [
+        {
+            'name': topic['name'],
+            'display_name': topic['display_name'],
+            'selected': topic['name'] in selected_topics,
+        } for topic in TOPICS
+    ]
 
     # prompt logic
     show_prompt = 'no'
@@ -714,6 +792,12 @@ def default_context(papers, **kws):
         publication_statuses=kws.get('publication_statuses', []),
         sort_by=kws.get('sort_by', ''),
         sort_order=kws.get('sort_order', 'desc'),
+        settings_download_dir=download_dir,
+        settings_storage_used=_get_storage_usage(download_dir),
+        settings_storage_papers=len(db),
+        settings_download_topics=settings_topics,
+        settings_date_range=SETTINGS_DATE_RANGE,
+        settings_topic_stats=SETTINGS_TOPIC_STATS,
     )
     ans.update(kws)
     return ans
