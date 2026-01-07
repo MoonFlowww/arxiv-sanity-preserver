@@ -232,7 +232,7 @@ def _build_topic_stats(paper_db, topic_pids):
             'avg_score': avg_score,
             'avg_score_display': _format_score(avg_score),
         })
-    stats.sort(key=lambda row: row['display_name'])
+    stats.sort(key=lambda row: (-row['paper_count'], row['display_name']))
     return stats
 
 

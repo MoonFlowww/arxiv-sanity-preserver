@@ -794,14 +794,12 @@
                     </div>
                     <div class="settings-row settings-row-stack">
                         <span>arXiv databases</span>
-                        <div class="settings-list">
+                        <div class="settings-list settings-checkbox-list">
                             {% for topic in settings_download_topics %}
-                            <span class="settings-chip {% if topic.selected %}selected{% endif %}">
-                                {{ topic.display_name }}
-                                {% if topic.selected %}
-                                <span class="settings-chip-status">Selected</span>
-                                {% endif %}
-                            </span>
+                            <label class="settings-checkbox-item">
+                                <input type="checkbox" {% if topic.selected %}checked{% endif %} disabled>
+                                <span>{{ topic.display_name }}</span>
+                            </label>
                             {% endfor %}
                         </div>
                     </div>
@@ -816,6 +814,7 @@
                             <button type="button" class="settings-button" id="settings-today-button">Today</button>
                         </span>
                     </div>
+                    <p class="settings-note">Dates define the paper download window for the next ingestion run.</p>
                 </div>
             </section>
             <section class="settings-panel" id="settings-storage" role="tabpanel" aria-hidden="true">
@@ -838,7 +837,7 @@
                     <p>Category coverage across the database.</p>
                     <div class="settings-row settings-row-stack">
                         <span>Per-category metrics</span>
-                        <div class="settings-table">
+                        <div class="settings-table settings-table-scroll">
                             <div class="settings-table-row settings-table-header">
                                 <span>Category</span>
                                 <span>Papers</span>
@@ -855,6 +854,7 @@
                             {% endfor %}
                         </div>
                     </div>
+                    <p class="settings-note">Sorted by total papers. Scroll to see the full list beyond the first 10.</p>
                 </div>
             </section>
         </div>
