@@ -198,6 +198,41 @@
                 setActiveTab(tabButtons[0].getAttribute('data-tab'));
             }
         }
+        function initDownloadSettingsPanel() {
+            var topicContainer = document.getElementById('settings-topic-tags');
+            if (!topicContainer) {
+                return;
+            }
+            var topicInputs = topicContainer.querySelectorAll('input[type="checkbox"]');
+            var rows = document.querySelectorAll('.settings-download-row');
+            var updateRows = function () {
+                rows.forEach(function (row) {
+                    var topicValue = row.getAttribute('data-topic');
+                    var input = topicContainer.querySelector('input[value="' + topicValue + '"]');
+                    var isChecked = input ? input.checked : false;
+                    row.classList.toggle('is-hidden', !isChecked);
+                });
+            };
+            topicInputs.forEach(function (input) {
+                input.addEventListener('change', updateRows);
+            });
+            updateRows();
+
+            var saveButton = document.querySelector('.settings-save-button');
+            if (saveButton && !saveButton.dataset.bound) {
+                saveButton.addEventListener('click', function () {
+                    var original = saveButton.getAttribute('data-label') || saveButton.textContent;
+                    saveButton.setAttribute('data-label', original);
+                    saveButton.textContent = 'Saved';
+                    saveButton.classList.add('saved');
+                    setTimeout(function () {
+                        saveButton.textContent = original;
+                        saveButton.classList.remove('saved');
+                    }, 1500);
+                });
+                saveButton.dataset.bound = 'true';
+            }
+        }
     </script>
 
     <script>
@@ -477,6 +512,7 @@
             initLayoutToggle('.layout-btn');
             initThemeToggle();
             initSettingsModal();
+            initDownloadSettingsPanel();
             updateSettingsPanelValues();
             $('.layout-btn').on('click', updateSettingsPanelValues);
             $('#ingest-overlay').on('click', function (event) {
@@ -794,12 +830,45 @@
                     </div>
                     <div class="settings-row settings-row-stack">
                         <span>arXiv databases</span>
-                        <div class="settings-list settings-checkbox-list">
+                        <div class="settings-topic-picker">
+                            <div class="tag-list limited settings-topic-list" id="settings-topic-tags">
+                                {% for topic in settings_download_topics %}
+                                <label class="tag settings-topic-tag">
+                                    <input type="checkbox" name="download_topics[]" value="{{ topic.name }}" {% if topic.selected %}checked{% endif %}>
+                                    <span data-full-name="{{ topic.display_name }}" title="{{ topic.display_name }}">{{ topic.display_name }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                            <button type="button" class="settings-button settings-save-button">Save selections</button>
+                        </div>
+                    </div>
+                    <div class="settings-row settings-row-stack">
+                        <span>Download parameters by topic</span>
+                        <div class="settings-table settings-table-scroll settings-download-table">
+                            <div class="settings-table-row settings-table-header">
+                                <span>Topic</span>
+                                <span>Papers owned</span>
+                                <span>Owned start</span>
+                                <span>Owned end</span>
+                                <span>Desired start</span>
+                                <span>Desired end</span>
+                                <span>Published</span>
+                            </div>
                             {% for topic in settings_download_topics %}
-                            <label class="settings-checkbox-item">
-                                <input type="checkbox" {% if topic.selected %}checked{% endif %} disabled>
+                            {% set topic_stats = settings_topic_stats | selectattr('display_name', 'equalto', topic.display_name) | list %}
+                            {% set topic_stat = topic_stats[0] if topic_stats else None %}
+                            <div class="settings-table-row settings-download-row" data-topic="{{ topic.name }}">
                                 <span>{{ topic.display_name }}</span>
-                            </label>
+                                <span>{{ topic_stat.paper_count_display if topic_stat else '—' }}</span>
+                                <span>{{ settings_date_range.start }}</span>
+                                <span>{{ settings_date_range.end }}</span>
+                                <input class="settings-input" type="date" name="download_start_{{ topic.name }}">
+                                <input class="settings-input" type="date" name="download_end_{{ topic.name }}">
+                                <label class="settings-checkbox-inline">
+                                    <input type="checkbox" name="download_published_{{ topic.name }}">
+                                    <span>Published</span>
+                                </label>
+                            </div>
                             {% endfor %}
                         </div>
                     </div>
