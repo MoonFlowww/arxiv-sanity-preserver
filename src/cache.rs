@@ -1,7 +1,5 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
 use once_cell::sync::Lazy;
-use reqwest::blocking::Client;
-use reqwest::Url;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -10,8 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::thread::sleep;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use crate::utils;
 
 const DEFAULT_CONFIG_PATH: &str = "pipeline_config.json";
@@ -23,7 +20,6 @@ const DEFAULT_TFIDF_META_JSON_PATH: &str = ".pipeline/tfidf_meta.json";
 const DEFAULT_DATABASE_PATH: &str = ".pipeline/as.db";
 const DEFAULT_SERVE_CACHE_PATH: &str = ".pipeline/serve_cache.p";
 const DEFAULT_DB_SERVE_PATH: &str = ".pipeline/db2.p";
-const OPENALEX_WORKS_ENDPOINT: &str = "https://api.openalex.org/works";
 const SECONDS_PER_YEAR: f64 = 365.25 * 24.0 * 60.0 * 60.0;
 
 static PUNCTUATION: Lazy<HashSet<char>> = Lazy::new(|| {
@@ -140,34 +136,6 @@ pub fn run_make_cache(config_path: &Path) -> Result<(), String> {
         normalize_paper(_pid, paper);
         ensure_time_metadata(paper)?;
     }
-
-    println!("fetching OpenAlex metadata (if missing)...");
-    let client = Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()
-        .map_err(|err| format!("Failed to build HTTP client: {err}"))?;
-    let mut updated_openalex = 0;
-    for (pid, paper) in db.iter_mut() {
-        if paper.citation_count.is_some()
-            && paper.is_accepted.is_some()
-            && paper.is_published.is_some()
-        {
-            continue;
-        }
-        println!("Fetching OpenAlex metadata for {}: {}", pid, paper.title);
-        let metadata = fetch_openalex_metadata(&client, &paper.title);
-        if metadata.citation_count.is_some()
-            || metadata.is_accepted.is_some()
-            || metadata.is_published.is_some()
-        {
-            updated_openalex += 1;
-        }
-        paper.citation_count = paper.citation_count.or(metadata.citation_count);
-        paper.is_accepted = paper.is_accepted.or(metadata.is_accepted);
-        paper.is_published = paper.is_published.or(metadata.is_published);
-        sleep(Duration::from_millis(100));
-    }
-    println!("Updated OpenAlex metadata for {} papers.", updated_openalex);
 
     println!("computing OpenAlex-inspired recency-aware scores...");
     let now_ts = SystemTime::now()
@@ -532,106 +500,6 @@ fn parse_timestamp(value: &str) -> Result<i64, String> {
         return Ok(dt.timestamp());
     }
     Err(format!("Failed to parse timestamp: {value}"))
-}
-
-#[derive(Debug, Default)]
-struct OpenAlexMetadata {
-    citation_count: Option<i64>,
-    is_accepted: Option<bool>,
-    is_published: Option<bool>,
-}
-
-fn fetch_openalex_metadata(client: &Client, title: &str) -> OpenAlexMetadata {
-    let mut metadata = OpenAlexMetadata::default();
-    let title = title.trim();
-    if title.is_empty() {
-        return metadata;
-    }
-    let mut url = match Url::parse(OPENALEX_WORKS_ENDPOINT) {
-        Ok(url) => url,
-        Err(_) => return metadata,
-    };
-    url.query_pairs_mut()
-        .append_pair("search", title)
-        .append_pair("per-page", "5");
-    let resp = client
-        .get(url)
-        .header(reqwest::header::USER_AGENT, "arxiv-sanity-preserver/1.0")
-        .send();
-    match resp {
-        Ok(response) => {
-            if response.status() == reqwest::StatusCode::NOT_FOUND {
-                println!("OpenAlex returned 404 for {}", title);
-                return metadata;
-            }
-            if !response.status().is_success() {
-                println!(
-                    "OpenAlex returned status {} for {}",
-                    response.status(),
-                    title
-                );
-                return metadata;
-            }
-            let body = match response.text() {
-                Ok(text) => text,
-                Err(err) => {
-                    println!(
-                        "Unexpected error fetching OpenAlex metadata for {}: {}",
-                        title, err
-                    );
-                    return metadata;
-                }
-            };
-            let payload: Value = match serde_json::from_str(&body) {
-                Ok(value) => value,
-                Err(err) => {
-                    println!(
-                        "Unexpected error parsing OpenAlex metadata for {}: {}",
-                        title, err
-                    );
-                    return metadata;
-                }
-            };
-            let results = match payload.get("results").and_then(Value::as_array) {
-                Some(results) => results,
-                None => return metadata,
-            };
-            let normalized_title = normalize_title(title);
-            let mut best_match = None;
-            for result in results {
-                if let Some(display_name) = result.get("display_name").and_then(Value::as_str) {
-                    if normalize_title(display_name) == normalized_title {
-                        best_match = Some(result);
-                        break;
-                    }
-                }
-                if best_match.is_none() {
-                    best_match = Some(result);
-                }
-            }
-            if let Some(result) = best_match {
-                metadata.citation_count = result.get("cited_by_count").and_then(Value::as_i64);
-                metadata.is_accepted = result.get("is_accepted").and_then(Value::as_bool);
-                metadata.is_published = result.get("is_published").and_then(Value::as_bool);
-            }
-            metadata
-        }
-        Err(err) => {
-            println!("Unexpected error fetching OpenAlex metadata for {}: {}", title, err);
-            metadata
-        }
-    }
-}
-
-fn normalize_title(title: &str) -> String {
-    title
-        .to_lowercase()
-        .chars()
-        .filter(|ch| !PUNCTUATION.contains(ch))
-        .collect::<String>()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
 }
 
 fn compute_library_sorted_pids(database_path: &Path) -> Result<Vec<String>, String> {

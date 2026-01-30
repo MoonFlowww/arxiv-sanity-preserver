@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 
 use crate::download;
 use crate::{
-    ensure_command_exists, load_db_jsonl, parse_arxiv_url, read_bincode, run_analyze,
-    run_buildsvm, run_pdftotext_for_file, render_thumbnail_for_pdf, utils,
+    ensure_command_exists, fetch_openalex_metadata, load_db_jsonl, parse_arxiv_url, read_bincode,
+    run_analyze, run_buildsvm, run_pdftotext_for_file, render_thumbnail_for_pdf, utils,
     vectorize_document_text, write_bincode, write_db_jsonl, IngestSinglePaperArgs, Paper,
     PipelineConfig, TfidfMatrix, TfidfMeta,
 };
@@ -37,6 +37,7 @@ fn fetch_paper_metadata(paper_id: &str) -> Result<Paper, String> {
         .as_ref()
         .map(|t| t.content.clone())
         .unwrap_or_default();
+    let openalex_metadata = fetch_openalex_metadata(&client, &title);
     let abstract_text = entry
         .summary
         .as_ref()
@@ -62,9 +63,9 @@ fn fetch_paper_metadata(paper_id: &str) -> Result<Paper, String> {
         abstract_text,
         updated,
         categories,
-        citation_count: None,
-        is_accepted: None,
-        is_published: None,
+        citation_count: openalex_metadata.citation_count,
+        is_accepted: openalex_metadata.is_accepted,
+        is_published: openalex_metadata.is_published,
     })
 }
 

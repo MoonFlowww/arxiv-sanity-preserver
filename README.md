@@ -1,137 +1,67 @@
 # arxiv sanity preserver
 
-**Update Nov 27, 2021**: you may wish to look at my from-scratch re-write of
-arxiv-sanity: [arxiv-sanity-lite](https://github.com/karpathy/arxiv-sanity-lite). It is a smaller version of
-arxiv-sanity that focuses on the core value proposition, is significantly less likely to ever go down, scales better,
-and has a few additional goodies such as multiple possible tags per account, regular emails of new papers of interest,
-etc. It is also running live on [arxiv-sanity-lite.com](https://arxiv-sanity-lite.com).
-
-This project is a web interface that attempts to tame the overwhelming flood of papers on Arxiv. It allows researchers
-to keep track of recent papers, search for papers, sort papers by similarity to any paper, see recent popular papers, to
-add papers to a personal library, and to get personalized recommendations of (new or old) Arxiv papers. This code is
-currently running live at [www.arxiv-sanity.com/](http://www.arxiv-sanity.com/), where it's serving 25,000+ Arxiv papers
-from Machine Learning (cs.[CV|AI|CL|LG|NE]/stat.ML) over the last ~3 years. With this code base you could replicate the
-website to any of your favorite subsets of Arxiv by simply changing the categories in `pipeline_config.json` or by
-passing `--category-counts` to the Rust CLI.
+A Rust-first rebuild of arxiv-sanity that bundles the data pipeline and the web UI in one CLI. It fetches arXiv
+metadata, downloads PDFs, extracts text, builds TF‑IDF similarity + recommendations, and serves the Axum web app.
+Everything is stored in a local pipeline directory (default: `.pipeline`).
 
 ![user interface](https://raw.github.com/karpathy/arxiv-sanity-preserver/master/ui.jpeg)
 
-### Code layout
+## What’s in this repo
 
-There are two large parts of the code:
+- **Rust CLI + server** (`arxiv_sanity_pipeline`): one binary that runs the pipeline and serves the UI.
+- **Axum web app**: search, filter, similarity browsing, personal library, and recommendations.
+- **SQLite user DB**: local database for users + saved papers.
+- **Config-driven pipeline**: all paths live in `pipeline_config.json`.
 
-**Rust pipeline + server**. The Rust CLI (`arxiv_sanity_pipeline`) handles the entire indexing pipeline and the Axum
-server. It downloads papers, extracts text, builds TF-IDF vectors, computes similarity, generates thumbnails, and
-serves the web UI. See the Rust CLI docs for subcommands and flags.
+## Key features
+- **ArXiv ingestion pipeline**: metadata fetch, PDF download, text extraction, thumbnails, and analysis.
+- **TF‑IDF + HNSW similarity**: fast nearest-neighbor lookups for “similar papers”.
+- **Personalized recommendations**: SVMs trained from your library selections.
+- **OpenAlex enrichment**: citations / publication metadata used to compute impact scores.
+- **Single-paper ingest**: add a paper on demand without a full crawl.
+- **Twitter daemon (optional)**: track tweets that mention arxiv.org.
 
-**User interface**. Then there is a web server (based on Rust/Axum/sqlite) that allows searching through the
-database and filtering papers by similarity, etc.
+## Requirements
+- Rust toolchain (install via [rustup](https://rustup.rs/)).
+- System tools used by the pipeline:
+    - **pdftotext** (`poppler-utils`) for PDF text extraction.
+    - **ImageMagick** (`convert` + `montage`) for thumbnails.
+    - **sqlite3** for the user database.
 
-### Rust CLI documentation
-
-For full CLI flags and subcommand details, see:
-
-* [`docs/cli.md`](docs/cli.md)
-* [`CLI_FLAGS.md`](CLI_FLAGS.md) (quick reference)
-
-### Dependencies
-
-You will need the Rust toolchain to build the CLI and server. Install Rust via
-[rustup](https://rustup.rs/) or your package manager.
-
-The pipeline also shells out to a few system tools:
-
-* **pdftotext** (from `poppler-utils`) for extracting text from PDFs.
-* **ImageMagick** (`convert` + `montage`) for rendering thumbnails.
-* **sqlite3** for the user database.
-
-On Ubuntu, install them with:
+On Ubuntu:
 
 ```bash
 sudo apt-get install poppler-utils imagemagick sqlite3
 ```
+## Quick start
 
-### Processing pipeline
+1. **Build the CLI**
+   ```bash
+   cargo build --release
+   ```
+2. **Initialize the SQLite database** (required before `buildsvm` / `run-all`)
 
-The processing pipeline requires you to run a series of CLI commands. In order, the processing pipeline is:
+   ```bash
+   sqlite3 .pipeline/as.db < schema.sql
+   ```
 
-1. Run `arxiv_sanity_pipeline fetch-papers` to query the arxiv API and create a file
-   containing metadata for each paper. The fetcher writes `db.jsonl` (one JSON record per paper). This is the step where
-   you would modify the **query**, indicating which parts of arxiv you'd like to use. Note that if
-   you're trying to pull too many papers arxiv will start to rate limit you. You may have to run the command multiple
-   times, and I recommend using the arg `--start-index` to restart where you left off when you were last interrupted by
-   arxiv.
+3. **Run the full pipeline** (fetch → download → parse → thumbnails → analyze → SVM → cache)
 
-    * **Per-category limits (defaulted)**: By default, the command fetches per-category using
-      `--category-counts "cs.AI=2000,cs.LG=2000,stat.ML=2000,cs.IT=1500,eess.SP=1500,cs.NE=1000,cs.CL=1000,cs.CV=1500,cond-mat.stat-mech=500,q-fin.TR=2000,q-fin.RM=2000,q-fin.ST=2000"`,
-      which totals roughly 19k papers focused on Quantitative Finance and Computer Vision. Override the defaults with
-      your own comma-separated `category=count` list (e.g., `cs.AI=50,cs.CL=20`), or set `--category-counts ""` to fall
-      back to the combined `--search-query`.
+   ```bash
+   ./target/release/arxiv_sanity_pipeline run-all
+   ```
 
-    * **Example (20k target with Quantitative Finance + Computer Vision focus)**:
+4. **Start the server**
 
-      ```bash
-      arxiv_sanity_pipeline fetch-papers --category-counts \
-      "cs.AI=2000,cs.LG=2000,stat.ML=2000,cs.IT=1500,eess.SP=1500,cs.NE=1000,cs.CL=1000,cs.CV=1500,cond-mat.stat-mech=500,q-fin.TR=2000,q-fin.RM=2000,q-fin.ST=2000"
-      ```
+   ```bash
+   ./target/release/arxiv_sanity_pipeline serve --port 5000
+   ```
 
-    * **Deduplication**: Downloads are keyed by arXiv ID, so a paper listed in multiple categories is saved once (the
-      command updates only if a newer version appears).
-    * **Migrating db.p to db.jsonl**: If you have an existing pickle database, convert it with
-      `arxiv_sanity_pipeline migrate-db --input db.p --output db.jsonl`.
-    * **Migrating analysis pickles to JSON**: If you need JSON versions of `tfidf_meta.p`,
-      `sim_dict.p`, or `user_sim.p`, run `arxiv_sanity_pipeline migrate-analysis --allow-missing` to emit
-      `tfidf_meta.json`, `sim_dict.json`, and `user_sim.json`.
-2. Run `arxiv_sanity_pipeline download-pdfs`, which iterates over all papers in parsed JSONL and downloads the papers
-   into folder `pdf`.
-3. Run `arxiv_sanity_pipeline parse-pdf-to-text` to export all text from pdfs to files in `txt`.
-4. Run `arxiv_sanity_pipeline thumb-pdf` to export thumbnails of all pdfs to `thumb`.
-5. Run `arxiv_sanity_pipeline analyze` to compute tfidf vectors for all documents based on bigrams. Saves
-   `tfidf.bin`, `tfidf_meta.json`, and `sim_dict.json`.
-6. Run `arxiv_sanity_pipeline buildsvm` to train SVMs for all users (if any), exports `user_sim.json`.
-7. Run `arxiv_sanity_pipeline make-cache` for various preprocessing so that server starts faster (and make sure to run
-   `sqlite3 as.db < schema.sql` if this is the very first time ever you're starting arxiv-sanity, which initializes an
-   empty database).
-8. (Optional) Run `arxiv_sanity_pipeline reset-pipeline --force` to remove generated pipeline outputs and cached serve
-   artifacts before starting fresh.
-9. Start the mongodb daemon in the background. Mongodb can be installed by following the instructions
-   here - https://docs.mongodb.com/tutorials/install-mongodb-on-ubuntu/.
+Then open <http://localhost:5000>.
 
-* Start the mongodb server with - `sudo service mongod start`.
-* Verify if the server is running in the background : The last line of /var/log/mongodb/mongod.log file must be -
-  `[initandlisten] waiting for connections on port <port> `
+## Pipeline commands
 
-10. Run the server with `arxiv_sanity_pipeline serve`. Visit localhost:5000 and enjoy sane viewing of papers!
-
-I have a simple shell script that runs these commands one by one, and every day I run this script to fetch new papers,
-incorporate them into the database, and recompute all tfidf vectors/classifiers. More details on this process below.
-
-### Artifact formats
-
-The Rust server and cache builder consume a small set of artifacts. The table below inventories the consumers and the
-formats/fields they require.
-
-| Artifact | Format | Produced by | Consumer | Required fields/keys |
-| --- | --- | --- | --- | --- |
-| `db.jsonl` | JSONL | `arxiv_sanity_pipeline fetch-papers` | `arxiv_sanity_pipeline make-cache` | Paper dicts must include `_rawid`, `_version`, `title`, `authors` (list of `{name}`), `summary`, `tags` (list of `{term}`), `updated`, `published`, `link`, and `arxiv_primary_category.term`. Missing citation-related fields are filled later. |
-| `tfidf_meta.json` | JSON | `arxiv_sanity_pipeline analyze` | `arxiv_sanity_pipeline make-cache`, `arxiv_sanity_pipeline serve` | `vocab` (term → index) and `idf` (list of floats). |
-| `sim_dict.json` | JSON | `arxiv_sanity_pipeline analyze` | `arxiv_sanity_pipeline serve` | Mapping of `paper_id+version` → list of nearest-neighbor ids. |
-| `user_sim.json` | JSON | `arxiv_sanity_pipeline buildsvm` | `arxiv_sanity_pipeline serve` | Mapping of `user_id` → list of recommended paper ids. |
-| `serve_cache.p` | Pickle | `arxiv_sanity_pipeline make-cache` | `arxiv_sanity_pipeline serve` | `date_sorted_pids`, `search_dict`, `library_sorted_pids`, `top_sorted_pids`. |
-| `db2.p` | Pickle | `arxiv_sanity_pipeline make-cache` | `arxiv_sanity_pipeline serve` | Enriched paper dicts with `time_updated`, `time_published`, `citation_count`, `impact_score`, `years_since_pub`, and `tscore` added to the original schema. |
-| `data/ingest_jobs/*.json` | JSON | `arxiv_sanity_pipeline serve` | `arxiv_sanity_pipeline serve` | Ingest/recompute job status and progress metadata. |
-
-### Running online
-
-If you'd like to run the server online (e.g. AWS) run it as `arxiv_sanity_pipeline serve --prod`.
-
-You also want to create a `secret_key.txt` file and fill it with random text.
-
-### Current workflow
-
-Running the site live is not currently set up for a fully automatic plug and play operation. Instead it's a bit of a
-manual process and I thought I should document how I'm keeping this code alive right now. I have a script that performs
-the following update early morning after arxiv papers come out (~midnight PST):
+You can run any step independently:
 
 ```bash
 arxiv_sanity_pipeline fetch-papers
@@ -143,27 +73,89 @@ arxiv_sanity_pipeline buildsvm
 arxiv_sanity_pipeline make-cache
 ```
 
-### Adding a single paper by arXiv id
-
-If you want to ingest one paper outside of the regular daily crawl, you can
-run the helper command and type (or pass) the arXiv identifier:
-
+### Ingest a single paper
 ```bash
 arxiv_sanity_pipeline ingest-single-paper 1512.08756v2
 ```
 
-The command pulls the metadata from arXiv, downloads the PDF, extracts text,
-creates thumbnails, and then reruns the analysis/cache steps so the new paper
-is immediately incorporated into the database.
+By default this refreshes the TF‑IDF vectors, HNSW index, and caches. Use `--no-recompute` to skip cache rebuild.
 
-I run the server in a screen session, so `screen -S serve` to create it (or `-r` to reattach to it) and run:
+### Resetting pipeline artifacts
+
+If you need to wipe generated data:
 
 ```bash
-arxiv_sanity_pipeline serve --prod --port 80
+arxiv_sanity_pipeline reset-pipeline --force
 ```
 
-The server will load the new files and begin hosting the site. Note that on some systems you can't use port 80 without
-`sudo`. Your two options are to use `iptables` to reroute ports or you can
-use [setcap](http://stackoverflow.com/questions/413807/is-there-a-way-for-non-root-processes-to-bind-to-privileged-ports-1024-on-l)
-to elavate the permissions of your `arxiv_sanity_pipeline` binary. In this case I'd recommend careful
-permissions and a dedicated service user.
+## Configuration
+
+The CLI reads `pipeline_config.json` by default. It controls output paths and the pipeline directory.
+You can point to a custom config with `--config` or emit the resolved config with `--write-config`.
+
+Default output layout (see `pipeline_config.json`):
+
+```
+.pipeline/
+  db.jsonl
+  pdf/
+  txt/
+  thumb/
+  tfidf.bin
+  tfidf_meta.json
+  sim_dict.p (legacy, optional)
+  hnsw_index.bin
+  user_sim.bin
+  as.db
+  serve_cache.p
+  db2.p
+  download_settings.json
+  ingest_jobs/
+```
+
+## Artifacts produced by the pipeline
+
+| Artifact | Produced by | Purpose |
+| --- | --- | --- |
+| `db.jsonl` | `fetch-papers` | arXiv metadata (one JSON record per paper). |
+| `pdf/` | `download-pdfs` | Downloaded PDFs. |
+| `txt/` | `parse-pdf-to-text` | Extracted text for analysis. |
+| `thumb/` | `thumb-pdf` | Thumbnail images. |
+| `tfidf.bin` | `analyze` | TF‑IDF vectors (bincode). |
+| `tfidf_meta.json` | `analyze` | Vocabulary + IDF + PID mappings. |
+| `sim_dict.p` / `sim_dict.json` | legacy pipeline / `migrate-analysis` | Optional similarity lists (server falls back to HNSW when present). |
+| `hnsw_index.bin` | `analyze` | HNSW index for fast similarity search. |
+| `user_sim.bin` | `buildsvm` | Per-user recommendation lists. |
+| `serve_cache.p` / `db2.p` | `make-cache` | Server-ready caches + enriched paper metadata. |
+| `download_settings.json` | server | Topic/date filters used for PDF download behavior. |
+| `.pipeline/ingest_jobs/*.json` | server | Background ingest + recompute job status. |
+
+For a complete CLI flag reference, see [`CLI_FLAGS.md`](CLI_FLAGS.md).
+
+## Optional: Twitter daemon
+
+Collect tweets mentioning arxiv.org (requires a Twitter API bearer token):
+
+```bash
+export TWITTER_BEARER_TOKEN=... 
+arxiv_sanity_pipeline twitter-daemon --query "arxiv.org"
+```
+
+Outputs JSONL by default to `twitter_recent.jsonl`.
+
+## Docker
+
+Build and run the bundled container:
+
+```bash
+docker build -t arxiv-sanity .
+docker run --rm -p 5000:5000 arxiv-sanity
+```
+
+## Notes
+
+- The server runs in “single-user” mode by default. You can override the default username with
+  `ASP_SINGLE_USER_NAME`.
+- `make-cache` fetches OpenAlex metadata (citations / publication status) for papers missing those fields, so expect
+  network access and a short delay between requests.
+- For additional CLI documentation, see [`docs/cli.md`](docs/cli.md).
