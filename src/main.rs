@@ -4,8 +4,10 @@ use once_cell::sync::Lazy;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use regex::Regex;
+use reqwest::{StatusCode, Url};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use smartcore::svm::svc::{SVCParameters, SVC};
 use smartcore::svm::Kernels;
@@ -42,6 +44,7 @@ const DEFAULT_TFIDF_META_OUT: &str = ".pipeline/tfidf_meta.json";
 const DEFAULT_SIM_OUT: &str = ".pipeline/sim_dict.json";
 const DEFAULT_USER_SIM_OUT: &str = ".pipeline/user_sim.json";
 const DEFAULT_DB_JSONL_OUT: &str = ".pipeline/db.jsonl";
+const OPENALEX_WORKS_ENDPOINT: &str = "https://api.openalex.org/works";
 const MAX_TRAIN_DOCS: usize = 5000;
 const MAX_FEATURES: usize = 5000;
 const MIN_TEXT_LEN: usize = 1000;
@@ -371,6 +374,12 @@ struct Paper {
     abstract_text: String,
     updated: String,
     categories: Vec<String>,
+    #[serde(default)]
+    citation_count: Option<i64>,
+    #[serde(default)]
+    is_accepted: Option<bool>,
+    #[serde(default)]
+    is_published: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -449,6 +458,10 @@ static TOKEN_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?u)\b[a-zA-Z_][a-zA-Z0-9_]+\b").expect("valid token regex"));
 static STOP_WORDS: Lazy<HashSet<String>> =
     Lazy::new(|| get(LANGUAGE::English).into_iter().collect());
+static OPENALEX_PUNCTUATION: Lazy<HashSet<char>> = Lazy::new(|| {
+    let chars = "'!\"#$%&'()*+,./:;<=>?@[\\]^_`{|}~";
+    chars.chars().collect()
+});
 
 fn tokenize(text: &str) -> Vec<String> {
     TOKEN_RE
@@ -456,6 +469,102 @@ fn tokenize(text: &str) -> Vec<String> {
         .map(|mat| mat.as_str().to_lowercase())
         .filter(|token| !STOP_WORDS.contains(token))
         .collect()
+}
+
+#[derive(Debug, Default, Clone)]
+struct OpenAlexMetadata {
+    citation_count: Option<i64>,
+    is_accepted: Option<bool>,
+    is_published: Option<bool>,
+}
+
+fn fetch_openalex_metadata(
+    client: &reqwest::blocking::Client,
+    title: &str,
+) -> OpenAlexMetadata {
+    let mut metadata = OpenAlexMetadata::default();
+    let title = title.trim();
+    if title.is_empty() {
+        return metadata;
+    }
+    let mut url = match Url::parse(OPENALEX_WORKS_ENDPOINT) {
+        Ok(url) => url,
+        Err(_) => return metadata,
+    };
+    url.query_pairs_mut()
+        .append_pair("search", title)
+        .append_pair("per-page", "5");
+    let resp = client
+        .get(url)
+        .header(reqwest::header::USER_AGENT, "arxiv-sanity-preserver/1.0")
+        .send();
+    let response = match resp {
+        Ok(response) => response,
+        Err(err) => {
+            println!("Unexpected error fetching OpenAlex metadata for {}: {}", title, err);
+            return metadata;
+        }
+    };
+    if response.status() == StatusCode::NOT_FOUND {
+        println!("OpenAlex returned 404 for {}", title);
+        return metadata;
+    }
+    if !response.status().is_success() {
+        println!(
+            "OpenAlex returned status {} for {}",
+            response.status(),
+            title
+        );
+        return metadata;
+    }
+    let body = match response.text() {
+        Ok(text) => text,
+        Err(err) => {
+            println!("Unexpected error reading OpenAlex response for {}: {}", title, err);
+            return metadata;
+        }
+    };
+    let payload: Value = match serde_json::from_str(&body) {
+        Ok(value) => value,
+        Err(err) => {
+            println!("Unexpected error parsing OpenAlex response for {}: {}", title, err);
+            return metadata;
+        }
+    };
+    let results = match payload.get("results").and_then(Value::as_array) {
+        Some(results) => results,
+        None => return metadata,
+    };
+    let normalized_title = normalize_title(title);
+    let mut best_match = None;
+    for result in results {
+        if let Some(display_name) = result.get("display_name").and_then(Value::as_str) {
+            if normalize_title(display_name) == normalized_title {
+                best_match = Some(result);
+                break;
+            }
+        }
+        if best_match.is_none() {
+            best_match = Some(result);
+        }
+    }
+    if let Some(result) = best_match {
+        metadata.citation_count = result.get("cited_by_count").and_then(Value::as_i64);
+        metadata.is_accepted = result.get("is_accepted").and_then(Value::as_bool);
+        metadata.is_published = result.get("is_published").and_then(Value::as_bool);
+    }
+    metadata
+}
+
+fn normalize_title(title: &str) -> String {
+    title
+        .to_lowercase()
+        .chars()
+        .filter(|ch| !OPENALEX_PUNCTUATION.contains(ch))
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn write_bincode<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
@@ -1168,6 +1277,7 @@ fn fetch_for_query(
                 .as_ref()
                 .map(|t| t.content.clone())
                 .unwrap_or_default();
+            let openalex_metadata = fetch_openalex_metadata(client, &title);
             let abstract_text = entry
                 .summary
                 .as_ref()
@@ -1193,6 +1303,9 @@ fn fetch_for_query(
                 abstract_text,
                 updated,
                 categories,
+                citation_count: openalex_metadata.citation_count,
+                is_accepted: openalex_metadata.is_accepted,
+                is_published: openalex_metadata.is_published,
             };
 
             if db.get(&raw_id).map(|p| p.version).unwrap_or(0) < version {

@@ -99,6 +99,10 @@ struct PaperRecord {
     #[serde(default)]
     citation_count: Option<i64>,
     #[serde(default)]
+    is_accepted: Option<bool>,
+    #[serde(default)]
+    is_published: Option<bool>,
+    #[serde(default)]
     impact_score: Option<f64>,
     #[serde(default)]
     years_since_pub: Option<f64>,
@@ -137,24 +141,33 @@ pub fn run_make_cache(config_path: &Path) -> Result<(), String> {
         ensure_time_metadata(paper)?;
     }
 
-    println!("fetching citation counts from OpenAlex (if missing)...");
+    println!("fetching OpenAlex metadata (if missing)...");
     let client = Client::builder()
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|err| format!("Failed to build HTTP client: {err}"))?;
-    let mut updated_citations = 0;
+    let mut updated_openalex = 0;
     for (pid, paper) in db.iter_mut() {
-        if paper.citation_count.is_some() {
+        if paper.citation_count.is_some()
+            && paper.is_accepted.is_some()
+            && paper.is_published.is_some()
+        {
             continue;
         }
-        println!("Fetching OpenAlex citations for {}: {}", pid, paper.title);
-        if let Some(count) = fetch_citation_count(&client, &paper.title) {
-            updated_citations += 1;
-            paper.citation_count = Some(count);
+        println!("Fetching OpenAlex metadata for {}: {}", pid, paper.title);
+        let metadata = fetch_openalex_metadata(&client, &paper.title);
+        if metadata.citation_count.is_some()
+            || metadata.is_accepted.is_some()
+            || metadata.is_published.is_some()
+        {
+            updated_openalex += 1;
         }
+        paper.citation_count = paper.citation_count.or(metadata.citation_count);
+        paper.is_accepted = paper.is_accepted.or(metadata.is_accepted);
+        paper.is_published = paper.is_published.or(metadata.is_published);
         sleep(Duration::from_millis(100));
     }
-    println!("Updated citation counts for {} papers.", updated_citations);
+    println!("Updated OpenAlex metadata for {} papers.", updated_openalex);
 
     println!("computing OpenAlex-inspired recency-aware scores...");
     let now_ts = SystemTime::now()
@@ -426,6 +439,10 @@ fn convert_json_paper(raw_id: &str, value: &Value) -> Result<PaperRecord, String
         .and_then(Value::as_bool)
         .unwrap_or(false);
 
+    let citation_count = value.get("citation_count").and_then(Value::as_i64);
+    let is_accepted = value.get("is_accepted").and_then(Value::as_bool);
+    let is_published = value.get("is_published").and_then(Value::as_bool);
+
     Ok(PaperRecord {
         raw_id: raw_id.to_string(),
         version,
@@ -440,6 +457,9 @@ fn convert_json_paper(raw_id: &str, value: &Value) -> Result<PaperRecord, String
         arxiv_comment,
         repo_links,
         is_opensource,
+        citation_count,
+        is_accepted,
+        is_published,
         ..PaperRecord::default()
     })
 }
@@ -514,12 +534,23 @@ fn parse_timestamp(value: &str) -> Result<i64, String> {
     Err(format!("Failed to parse timestamp: {value}"))
 }
 
-fn fetch_citation_count(client: &Client, title: &str) -> Option<i64> {
+#[derive(Debug, Default)]
+struct OpenAlexMetadata {
+    citation_count: Option<i64>,
+    is_accepted: Option<bool>,
+    is_published: Option<bool>,
+}
+
+fn fetch_openalex_metadata(client: &Client, title: &str) -> OpenAlexMetadata {
+    let mut metadata = OpenAlexMetadata::default();
     let title = title.trim();
     if title.is_empty() {
-        return None;
+        return metadata;
     }
-    let mut url = Url::parse(OPENALEX_WORKS_ENDPOINT).ok()?;
+    let mut url = match Url::parse(OPENALEX_WORKS_ENDPOINT) {
+        Ok(url) => url,
+        Err(_) => return metadata,
+    };
     url.query_pairs_mut()
         .append_pair("search", title)
         .append_pair("per-page", "5");
@@ -531,7 +562,7 @@ fn fetch_citation_count(client: &Client, title: &str) -> Option<i64> {
         Ok(response) => {
             if response.status() == reqwest::StatusCode::NOT_FOUND {
                 println!("OpenAlex returned 404 for {}", title);
-                return None;
+                return metadata;
             }
             if !response.status().is_success() {
                 println!(
@@ -539,23 +570,32 @@ fn fetch_citation_count(client: &Client, title: &str) -> Option<i64> {
                     response.status(),
                     title
                 );
-                return None;
+                return metadata;
             }
             let body = match response.text() {
                 Ok(text) => text,
                 Err(err) => {
-                    println!("Unexpected error fetching citation count for {}: {}", title, err);
-                    return None;
+                    println!(
+                        "Unexpected error fetching OpenAlex metadata for {}: {}",
+                        title, err
+                    );
+                    return metadata;
                 }
             };
             let payload: Value = match serde_json::from_str(&body) {
                 Ok(value) => value,
                 Err(err) => {
-                    println!("Unexpected error fetching citation count for {}: {}", title, err);
-                    return None;
+                    println!(
+                        "Unexpected error parsing OpenAlex metadata for {}: {}",
+                        title, err
+                    );
+                    return metadata;
                 }
             };
-            let results = payload.get("results").and_then(Value::as_array)?;
+            let results = match payload.get("results").and_then(Value::as_array) {
+                Some(results) => results,
+                None => return metadata,
+            };
             let normalized_title = normalize_title(title);
             let mut best_match = None;
             for result in results {
@@ -569,11 +609,16 @@ fn fetch_citation_count(client: &Client, title: &str) -> Option<i64> {
                     best_match = Some(result);
                 }
             }
-            best_match.and_then(|result| result.get("cited_by_count").and_then(Value::as_i64))
+            if let Some(result) = best_match {
+                metadata.citation_count = result.get("cited_by_count").and_then(Value::as_i64);
+                metadata.is_accepted = result.get("is_accepted").and_then(Value::as_bool);
+                metadata.is_published = result.get("is_published").and_then(Value::as_bool);
+            }
+            metadata
         }
         Err(err) => {
-            println!("Unexpected error fetching citation count for {}: {}", title, err);
-            None
+            println!("Unexpected error fetching OpenAlex metadata for {}: {}", title, err);
+            metadata
         }
     }
 }
