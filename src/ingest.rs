@@ -125,6 +125,8 @@ fn update_incremental_tfidf(
     let vector = vectorize_document_text(&text, &meta);
     let pid = format!("{}v{}", paper.id, paper.version);
 
+    let pid_exists = meta.ptoi.contains_key(&pid);
+
     if let Some(&idx) = meta.ptoi.get(&pid) {
         if let Some(slot) = tfidf.vectors.get_mut(idx) {
             *slot = vector;
@@ -149,10 +151,40 @@ fn update_incremental_tfidf(
     fs::write(&config.tfidf_meta_path, meta_json)
         .map_err(|err| format!("Failed to write {}: {err}", config.tfidf_meta_path))?;
 
-    println!("building HNSW index...");
-    let hnsw_index = HnswIndex::build(&tfidf.vectors, &meta.pids)?;
+    let hnsw_index_path = Path::new(&config.hnsw_index_path);
+    let mut hnsw_index = if hnsw_index_path.exists() {
+        match read_bincode(hnsw_index_path) {
+            Ok(index) => Some(index),
+            Err(err) => {
+                eprintln!(
+                    "Failed to read existing HNSW index at {}: {err}",
+                    hnsw_index_path.display()
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let mut rebuild_hnsw = !pid_exists;
+    if let Some(index) = hnsw_index.as_ref() {
+        rebuild_hnsw = index.len() != tfidf.vectors.len() - if pid_exists { 0 } else { 1 };
+    }
+    if pid_exists || rebuild_hnsw {
+        println!("building HNSW index...");
+        hnsw_index = Some(HnswIndex::build(&tfidf.vectors, &meta.pids)?);
+    } else if let Some(index) = hnsw_index.as_mut() {
+        println!("updating HNSW index with new paper...");
+        index.insert(pid.clone(), vector.clone())?;
+    } else {
+        println!("building HNSW index...");
+        hnsw_index = Some(HnswIndex::build(&tfidf.vectors, &meta.pids)?);
+    }
     println!("writing {}", config.hnsw_index_path);
-    write_bincode(Path::new(&config.hnsw_index_path), &hnsw_index)?;
+    if let Some(index) = hnsw_index {
+        write_bincode(Path::new(&config.hnsw_index_path), &index)?;
+    }
 
     Ok(())
 }

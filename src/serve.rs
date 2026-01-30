@@ -354,6 +354,14 @@ fn load_hnsw_index(path: &Path) -> Option<HnswIndex> {
     Some(index)
 }
 
+fn refresh_hnsw_in_state(state: &AppState) {
+    if let Some(index) = load_hnsw_index(&state.config.hnsw_index_path) {
+        let mut data = state.data.write().unwrap();
+        data.hnsw_index = Some(index);
+    }
+}
+
+
 fn load_pickle_or_json_value(
     pickle_path: &Path,
     json_path: Option<&Path>,
@@ -1106,14 +1114,6 @@ fn papers_similar(data: &ServeData, pid: &str) -> Vec<Value> {
     if !data.db.contains_key(&rawpid) {
         return vec![];
     }
-    if let Some(hnsw_index) = &data.hnsw_index {
-        if let Some(similar) = hnsw_index.find_neighbors(pid, SIMILAR_RESULTS) {
-            return similar
-                .iter()
-                .filter_map(|k| data.db.get(&utils::strip_version(k)).cloned())
-                .collect();
-        }
-    }
     if let Some(similar) = data.sim_dict.get(pid) {
         return similar
             .iter()
@@ -1133,6 +1133,14 @@ fn papers_similar(data: &ServeData, pid: &str) -> Vec<Value> {
             .flat_map(|list| list.iter())
             .filter_map(|k| data.db.get(&utils::strip_version(k)).cloned())
             .collect();
+    }
+    if let Some(hnsw_index) = &data.hnsw_index {
+        if let Some(similar) = hnsw_index.find_neighbors(pid, SIMILAR_RESULTS) {
+            return similar
+                .iter()
+                .filter_map(|k| data.db.get(&utils::strip_version(k)).cloned())
+                .collect();
+        }
     }
     vec![data.db.get(&rawpid).cloned().unwrap()]
 }
@@ -2465,6 +2473,7 @@ fn run_ingest_job(state: &AppState, job_id: &str, paper_id: &str) {
         false,
         warning,
     );
+    refresh_hnsw_in_state(state);
     let recompute_state = get_recompute_status(state);
     if recompute_state.status == "running" {
         update_ingest_job(

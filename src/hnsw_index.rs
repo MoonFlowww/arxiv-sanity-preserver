@@ -83,6 +83,22 @@ impl HnswIndex {
         })
     }
 
+    pub fn insert(&mut self, pid: String, vector: Vec<f32>) -> Result<(), String> {
+        if self.ptoi.contains_key(&pid) {
+            return Err(format!("HNSW index already contains {pid}"));
+        }
+        let idx = self.vectors.len();
+        self.vectors.push(vector.clone());
+        self.pids.push(pid.clone());
+        self.ptoi.insert(pid, idx);
+        self.hnsw.insert((idx, vector));
+        Ok(())
+    }
+
+    pub fn len(&self) -> usize {
+        self.pids.len()
+    }
+
     pub fn find_neighbors(&self, pid: &str, k: usize) -> Option<Vec<String>> {
         let resolved = self.resolve_pid(pid)?;
         let idx = *self.ptoi.get(resolved)?;
