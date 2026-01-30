@@ -1,0 +1,11 @@
+# from repo root
+cargo run -p arxiv_sanity_pipeline --bin arxiv_sanity_pipeline -- fetch-papers --category-counts "cs.AI=20,cs.CL=12"
+cargo run -p arxiv_sanity_pipeline --bin arxiv_sanity_pipeline -- download-pdfs
+cargo run -p arxiv_sanity_pipeline --bin arxiv_sanity_pipeline -- parse-pdf-to-text
+cargo run -p arxiv_sanity_pipeline --bin arxiv_sanity_pipeline -- thumb-pdf
+cargo run -p arxiv_sanity_pipeline --bin arxiv_sanity_pipeline -- analyze
+cargo run -p arxiv_sanity_pipeline --bin arxiv_sanity_pipeline -- buildsvm
+cargo run -p arxiv_sanity_pipeline --bin arxiv_sanity_pipeline -- make-cache
+
+
+cargo run -p arxiv_sanity_pipeline --bin arxiv_sanity_pipeline -- reset-pipeline --force
