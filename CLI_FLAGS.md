@@ -67,8 +67,6 @@ No flags.
 | --- | --- | --- |
 | `--tfidf-meta-in` | `tfidf_meta.p` | `Path to tfidf_meta.p` |
 | `--tfidf-meta-out` | `tfidf_meta.json` | `Path to tfidf_meta.json` |
-| `--sim-in` | `sim_dict.p` | `Path to sim_dict.p` |
-| `--sim-out` | `sim_dict.json` | `Path to sim_dict.json` |
 | `--user-sim-in` | `user_sim.p` | `Path to user_sim.p` |
 | `--user-sim-out` | `user_sim.json` | `Path to user_sim.json` |
 | `--allow-missing` | `false` | `Skip missing input files instead of failing` |

@@ -14,7 +14,7 @@ The pipeline is composed of subcommands that can be run independently or via the
 * `download-pdfs` — Download PDFs for the papers in `db.jsonl`.
 * `parse-pdf-to-text` — Extract text into `txt/`.
 * `thumb-pdf` — Generate thumbnails in `thumb/`.
-* `analyze` — Build TF-IDF vectors + similarity artifacts.
+*  `analyze` — Build TF-IDF vectors + HNSW similarity index.
 * `buildsvm` — Train per-user SVM recommendations.
 * `make-cache` — Build server cache artifacts.
 * `ingest-single-paper` — End-to-end ingest for a single paper.
@@ -47,7 +47,7 @@ The `analyze` and `buildsvm` subcommands produce the following artifacts:
 
 * `tfidf.bin` (`PipelineConfig.tfidf_path`): `bincode`-serialized `TfidfMatrix { vectors: Vec<Vec<f32>> }` (L2-normalized TF-IDF vectors).
 * `tfidf_meta.json` (`PipelineConfig.tfidf_meta_path`): `TfidfMeta` serialized with `serde_json` containing `vocab`, `idf`, `pids`, and `ptoi`.
-* `sim_dict.bin` (`PipelineConfig.sim_dict_path`): `bincode`-serialized `HashMap<String, Vec<String>>` mapping each paper id+version to its nearest neighbors.
+* `hnsw_index.bin` (`PipelineConfig.hnsw_index_path`): Serialized HNSW index used for similarity search.
 * `user_sim.bin` (`PipelineConfig.user_sim_path`): `bincode`-serialized `HashMap<i64, Vec<String>>` mapping user IDs to recommended paper IDs.
 
 Tokenization matches the historical regex (`\b[a-zA-Z_][a-zA-Z0-9_]+\b`), lowercases, filters English stop words, builds unigrams + bigrams, applies sublinear TF with smoothed IDF, and L2-normalizes the vectors.
@@ -61,4 +61,4 @@ arxiv_sanity_pipeline migrate-analysis --allow-missing
 arxiv_sanity_pipeline migrate-db --input db.p --output db.jsonl
 ```
 
-This emits JSON artifacts (`tfidf_meta.json`, `sim_dict.json`, `user_sim.json`) that the Rust server can read.
+This emits JSON artifacts (`tfidf_meta.json`, `user_sim.json`) that the Rust server can read.

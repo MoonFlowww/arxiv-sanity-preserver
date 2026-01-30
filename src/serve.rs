@@ -87,8 +87,6 @@ struct ServeConfig {
     tfidf_path: PathBuf,
     meta_path: PathBuf,
     tfidf_meta_json_path: PathBuf,
-    sim_path: PathBuf,
-    sim_json_path: PathBuf,
     hnsw_index_path: PathBuf,
     user_sim_path: PathBuf,
     user_sim_json_path: PathBuf,
@@ -115,8 +113,6 @@ impl ServeConfig {
             tfidf_path: pipeline_path("tfidf.p"),
             meta_path: pipeline_path("tfidf_meta.p"),
             tfidf_meta_json_path: pipeline_path("tfidf_meta.json"),
-            sim_path: pipeline_path("sim_dict.p"),
-            sim_json_path: pipeline_path("sim_dict.json"),
             hnsw_index_path: pipeline_path("hnsw_index.bin"),
             user_sim_path: pipeline_path("user_sim.p"),
             user_sim_json_path: pipeline_path("user_sim.json"),
@@ -192,7 +188,6 @@ struct DownloadSettingsPayload {
 #[derive(Clone)]
 struct ServeData {
     db: HashMap<String, Value>,
-    sim_dict: HashMap<String, Vec<String>>,
     hnsw_index: Option<HnswIndex>,
     user_sim: HashMap<i64, Vec<String>>,
     date_sorted_pids: Vec<String>,
@@ -324,8 +319,6 @@ fn refresh_serving_data(config: &ServeConfig) -> Result<ServeData, Box<dyn std::
     ensure_impact_scores(&mut db);
 
     let _meta = load_pickle_or_json_value(&config.meta_path, Some(&config.tfidf_meta_json_path))?;
-    let sim_value = load_pickle_or_json_value(&config.sim_path, Some(&config.sim_json_path))?;
-    let sim_dict = value_to_map_list(sim_value);
     let hnsw_index = load_hnsw_index(&config.hnsw_index_path);
 
     println!("loading user recommendations {:?}", config.user_sim_path);
@@ -354,7 +347,6 @@ fn refresh_serving_data(config: &ServeConfig) -> Result<ServeData, Box<dyn std::
 
     Ok(ServeData {
         db,
-        sim_dict,
         hnsw_index,
         user_sim,
         date_sorted_pids,
@@ -622,17 +614,6 @@ fn value_to_map(value: Value) -> Result<HashMap<String, Value>, Box<dyn std::err
         .as_object()
         .ok_or("expected object in pickle")?;
     Ok(obj.clone().into_iter().collect())
-}
-
-fn value_to_map_list(value: Value) -> HashMap<String, Vec<String>> {
-    let mut out = HashMap::new();
-    if let Some(map) = value.as_object() {
-        for (key, value) in map {
-            let list = value_as_string_list(value).unwrap_or_default();
-            out.insert(key.clone(), list);
-        }
-    }
-    out
 }
 
 fn value_to_user_sim(value: Option<Value>) -> HashMap<i64, Vec<String>> {
@@ -1227,26 +1208,6 @@ fn papers_similar(data: &ServeData, pid: &str) -> Vec<Value> {
     let rawpid = utils::strip_version(pid);
     if !data.db.contains_key(&rawpid) {
         return vec![];
-    }
-    if let Some(similar) = data.sim_dict.get(pid) {
-        return similar
-            .iter()
-            .filter_map(|k| data.db.get(&utils::strip_version(k)).cloned())
-            .collect();
-    }
-    let fallback = data
-        .sim_dict
-        .keys()
-        .find(|k| k.contains(&rawpid))
-        .cloned();
-    if let Some(id_use) = fallback {
-        return data
-            .sim_dict
-            .get(&id_use)
-            .into_iter()
-            .flat_map(|list| list.iter())
-            .filter_map(|k| data.db.get(&utils::strip_version(k)).cloned())
-            .collect();
     }
     if let Some(hnsw_index) = &data.hnsw_index {
         if let Some(similar) = hnsw_index.find_neighbors(pid, SIMILAR_RESULTS) {

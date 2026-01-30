@@ -41,7 +41,6 @@ const DEFAULT_CATEGORY_COUNTS: &str = "cs.AI=2000,cs.LG=2000,stat.ML=2000,cs.IT=
 const DEFAULT_MISSING_THUMB: &str = "static/missing.svg";
 const DEFAULT_OUTPUT_DIR: &str = ".pipeline";
 const DEFAULT_TFIDF_META_OUT: &str = ".pipeline/tfidf_meta.json";
-const DEFAULT_SIM_OUT: &str = ".pipeline/sim_dict.json";
 const DEFAULT_USER_SIM_OUT: &str = ".pipeline/user_sim.json";
 const DEFAULT_DB_JSONL_OUT: &str = ".pipeline/db.jsonl";
 const OPENALEX_WORKS_ENDPOINT: &str = "https://api.openalex.org/works";
@@ -62,7 +61,6 @@ struct PipelineConfig {
     database_path: String,
     tfidf_path: String,
     tfidf_meta_path: String,
-    sim_dict_path: String,
     hnsw_index_path: String,
     user_sim_path: String,
 }
@@ -80,7 +78,6 @@ impl Default for PipelineConfig {
             database_path: output_path(&output_dir, "as.db"),
             tfidf_path: output_path(&output_dir, "tfidf.bin"),
             tfidf_meta_path: output_path(&output_dir, "tfidf_meta.json"),
-            sim_dict_path: output_path(&output_dir, "sim_dict.bin"),
             hnsw_index_path: output_path(&output_dir, "hnsw_index.bin"),
             user_sim_path: output_path(&output_dir, "user_sim.bin"),
         }
@@ -107,8 +104,6 @@ struct PipelineConfigFile {
     tfidf_path: Option<String>,
     #[serde(default)]
     tfidf_meta_path: Option<String>,
-    #[serde(default)]
-    sim_dict_path: Option<String>,
     #[serde(default)]
     hnsw_index_path: Option<String>,
     #[serde(default)]
@@ -155,9 +150,6 @@ impl PipelineConfig {
             tfidf_meta_path: config
                 .tfidf_meta_path
                 .unwrap_or_else(|| output_path(&output_dir, "tfidf_meta.json")),
-            sim_dict_path: config
-                .sim_dict_path
-                .unwrap_or_else(|| output_path(&output_dir, "sim_dict.bin")),
             hnsw_index_path: config
                 .hnsw_index_path
                 .unwrap_or_else(|| output_path(&output_dir, "hnsw_index.bin")),
@@ -292,10 +284,6 @@ struct MigrateAnalysisArgs {
     tfidf_meta_in: PathBuf,
     #[arg(long = "tfidf-meta-out", default_value = DEFAULT_TFIDF_META_OUT)]
     tfidf_meta_out: PathBuf,
-    #[arg(long = "sim-in", default_value = "sim_dict.p")]
-    sim_in: PathBuf,
-    #[arg(long = "sim-out", default_value = DEFAULT_SIM_OUT)]
-    sim_out: PathBuf,
     #[arg(long = "user-sim-in", default_value = "user_sim.p")]
     user_sim_in: PathBuf,
     #[arg(long = "user-sim-out", default_value = DEFAULT_USER_SIM_OUT)]
@@ -1399,7 +1387,6 @@ fn resolve_reset_targets(config: &PipelineConfig) -> Result<ResetPipelineTargets
     let legacy_files = vec![
         cwd.join("db.p"),
         cwd.join("tfidf_meta.p"),
-        cwd.join("sim_dict.p"),
         cwd.join("user_sim.p"),
         cwd.join("db2.p"),
         cwd.join("serve_cache.p"),

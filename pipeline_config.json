@@ -8,7 +8,6 @@
   "database_path": ".pipeline/as.db",
   "tfidf_path": ".pipeline/tfidf.bin",
   "tfidf_meta_path": ".pipeline/tfidf_meta.json",
-  "sim_dict_path": ".pipeline/sim_dict.bin",
   "hnsw_index_path": ".pipeline/hnsw_index.bin",
   "user_sim_path": ".pipeline/user_sim.bin"
 }

@@ -223,12 +223,6 @@ pub fn run_migrate_analysis(args: &MigrateAnalysisArgs) -> Result<(), String> {
         args.allow_missing,
     )?;
     maybe_convert(
-        "sim_dict",
-        &args.sim_in,
-        &args.sim_out,
-        args.allow_missing,
-    )?;
-    maybe_convert(
         "user_sim",
         &args.user_sim_in,
         &args.user_sim_out,

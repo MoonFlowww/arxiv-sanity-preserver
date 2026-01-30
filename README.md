@@ -103,7 +103,6 @@ Default output layout (see `pipeline_config.json`):
   thumb/
   tfidf.bin
   tfidf_meta.json
-  sim_dict.p (legacy, optional)
   hnsw_index.bin
   user_sim.bin
   as.db
@@ -123,8 +122,7 @@ Default output layout (see `pipeline_config.json`):
 | `thumb/` | `thumb-pdf` | Thumbnail images. |
 | `tfidf.bin` | `analyze` | TF‑IDF vectors (bincode). |
 | `tfidf_meta.json` | `analyze` | Vocabulary + IDF + PID mappings. |
-| `sim_dict.p` / `sim_dict.json` | legacy pipeline / `migrate-analysis` | Optional similarity lists (server falls back to HNSW when present). |
-| `hnsw_index.bin` | `analyze` | HNSW index for fast similarity search. |
+| `hnsw_index.bin` | `analyze` | HNSW index for fast similarity search (the sole similarity mechanism). |
 | `user_sim.bin` | `buildsvm` | Per-user recommendation lists. |
 | `serve_cache.p` / `db2.p` | `make-cache` | Server-ready caches + enriched paper metadata. |
 | `download_settings.json` | server | Topic/date filters used for PDF download behavior. |
