@@ -251,16 +251,71 @@
             renderSelectedTopics();
 
             var saveButton = document.querySelector('.settings-save-button');
+            var statusMessage = document.getElementById('settings-download-status');
+            var setStatusMessage = function (message, isError) {
+                if (!statusMessage) {
+                    return;
+                }
+                statusMessage.textContent = message || '';
+                statusMessage.classList.toggle('is-error', Boolean(isError));
+                statusMessage.classList.toggle('is-success', Boolean(message) && !isError);
+            };
             if (saveButton && !saveButton.dataset.bound) {
                 saveButton.addEventListener('click', function () {
                     var original = saveButton.getAttribute('data-label') || saveButton.textContent;
                     saveButton.setAttribute('data-label', original);
-                    saveButton.textContent = 'Saved';
-                    saveButton.classList.add('saved');
-                    setTimeout(function () {
+                    saveButton.textContent = 'Saving...';
+                    saveButton.classList.remove('saved');
+                    setStatusMessage('Saving selections...', false);
+
+                    var payload = {
+                        selected_topics: [],
+                        topics: {}
+                    };
+                    topicInputs.forEach(function (input) {
+                        if (input.checked) {
+                            payload.selected_topics.push(input.value);
+                        }
+                    });
+                    rows.forEach(function (row) {
+                        var topicValue = row.getAttribute('data-topic');
+                        var startInput = row.querySelector('input[name="download_start_' + topicValue + '"]');
+                        var endInput = row.querySelector('input[name="download_end_' + topicValue + '"]');
+                        var publishedInput = row.querySelector('input[name="download_published_' + topicValue + '"]');
+                        payload.topics[topicValue] = {
+                            start: startInput ? startInput.value : null,
+                            end: endInput ? endInput.value : null,
+                            published: publishedInput ? publishedInput.checked : false
+                        };
+                    });
+
+                    fetch('/settings/download', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(payload)
+                    }).then(function (response) {
+                        if (!response.ok) {
+                            return response.json().then(function (data) {
+                                var errorMessage = data && data.error ? data.error : 'Unable to save selections.';
+                                throw new Error(errorMessage);
+                            });
+                        }
+                        return response.json();
+                    }).then(function () {
+                        saveButton.textContent = 'Saved';
+                        saveButton.classList.add('saved');
+                        setStatusMessage('Selections saved.', false);
+                        setTimeout(function () {
+                            saveButton.textContent = original;
+                            saveButton.classList.remove('saved');
+                        }, 1500);
+                    }).catch(function (error) {
                         saveButton.textContent = original;
                         saveButton.classList.remove('saved');
-                    }, 1500);
+                        setStatusMessage(error.message || 'Unable to save selections.', true);
+                    });
                 });
                 saveButton.dataset.bound = 'true';
             }
@@ -917,6 +972,7 @@
                                 </div>
                             </div>
                             <button type="button" class="settings-button settings-save-button">Save selections</button>
+                            <div class="settings-save-status" id="settings-download-status" role="status" aria-live="polite"></div>
                         </div>
                     </div>
                     <div class="settings-row settings-row-stack">
@@ -934,15 +990,16 @@
                             {% for topic in settings_download_topics %}
                             {% set topic_stats = settings_topic_stats | selectattr('display_name', 'equalto', topic.display_name) | list %}
                             {% set topic_stat = topic_stats[0] if topic_stats else None %}
+                            {% set download_values = settings_download_values.get(topic.name) %}
                             <div class="settings-table-row settings-download-row" data-topic="{{ topic.name }}">
                                 <span>{{ topic.display_name }}</span>
                                 <span>{{ topic_stat.paper_count_display if topic_stat else '—' }}</span>
                                 <span>{{ settings_date_range.start }}</span>
                                 <span>{{ settings_date_range.end }}</span>
-                                <input class="settings-input" type="date" name="download_start_{{ topic.name }}">
-                                <input class="settings-input" type="date" name="download_end_{{ topic.name }}">
+                                <input class="settings-input" type="date" name="download_start_{{ topic.name }}" value="{{ download_values.start if download_values and download_values.start else '' }}">
+                                <input class="settings-input" type="date" name="download_end_{{ topic.name }}" value="{{ download_values.end if download_values and download_values.end else '' }}">
                                 <label class="settings-checkbox-inline">
-                                    <input type="checkbox" name="download_published_{{ topic.name }}">
+                                    <input type="checkbox" name="download_published_{{ topic.name }}" {% if download_values and download_values.published %}checked{% endif %}>
                                     <span>Published</span>
                                 </label>
                             </div>

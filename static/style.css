@@ -1621,6 +1621,20 @@ html.dark-mode ul.flashes li {
     color: #38bdf8;
 }
 
+.settings-save-status {
+    margin-top: 0.35rem;
+    font-size: 0.78rem;
+    color: #94a3b8;
+}
+
+.settings-save-status.is-success {
+    color: #38bdf8;
+}
+
+.settings-save-status.is-error {
+    color: #f87171;
+}
+
 
 .settings-chip {
     display: inline-flex;

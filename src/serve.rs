@@ -6,7 +6,7 @@ use axum::{Form, Json, Router};
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use clap::Parser;
-use chrono::Datelike;
+use chrono::{Datelike, NaiveDate};
 use minijinja::value::Value as MiniValue;
 use minijinja::Environment;
 use rand::Rng;
@@ -99,6 +99,7 @@ struct ServeConfig {
     ingest_jobs_dir: PathBuf,
     tmp_dir: PathBuf,
     beg_for_hosting_money: bool,
+    download_settings_path: PathBuf,
 }
 
 impl ServeConfig {
@@ -126,6 +127,7 @@ impl ServeConfig {
             database_path: pipeline_path("as.db"),
             ingest_jobs_dir: pipeline_path("ingest_jobs"),
             tmp_dir: pipeline_path("tmp"),
+            download_settings_path: pipeline_path("download_settings.json"),
             beg_for_hosting_money: true,
         }
     }
@@ -153,6 +155,41 @@ struct TopicStat {
 struct DateRange {
     start: String,
     end: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct DownloadTopicSettings {
+    start: Option<String>,
+    end: Option<String>,
+    published: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct DownloadSettings {
+    selected_topics: Vec<String>,
+    topics: HashMap<String, DownloadTopicSettings>,
+}
+
+impl Default for DownloadSettings {
+    fn default() -> Self {
+        Self {
+            selected_topics: Vec::new(),
+            topics: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct DownloadTopicInput {
+    start: Option<String>,
+    end: Option<String>,
+    published: Option<bool>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct DownloadSettingsPayload {
+    selected_topics: Vec<String>,
+    topics: HashMap<String, DownloadTopicInput>,
 }
 
 #[derive(Clone)]
@@ -248,6 +285,7 @@ pub async fn run_with_args(args: ServeArgs) -> Result<(), Box<dyn std::error::Er
         .route("/ingest/recompute_status", get(ingest_recompute_status))
         .route("/recompute/status", get(recompute_status_endpoint))
         .route("/ingest", post(ingest_arxiv))
+        .route("/settings/download", post(update_download_settings))
         .route("/search", get(search))
         .route("/topics", get(topics))
         .route("/recommend", get(recommend))
@@ -329,6 +367,77 @@ fn refresh_serving_data(config: &ServeConfig) -> Result<ServeData, Box<dyn std::
         settings_date_range,
         settings_topic_stats,
     })
+}
+
+fn parse_date_string(value: &str) -> Option<NaiveDate> {
+    NaiveDate::parse_from_str(value, "%Y-%m-%d").ok()
+}
+
+fn clean_date_value(value: Option<String>) -> Option<String> {
+    value.and_then(|raw| {
+        let trimmed = raw.trim().to_string();
+        if trimmed.is_empty() {
+            return None;
+        }
+        if parse_date_string(&trimmed).is_some() {
+            Some(trimmed)
+        } else {
+            None
+        }
+    })
+}
+
+fn sanitize_download_settings(
+    mut settings: DownloadSettings,
+    valid_topics: &HashSet<String>,
+) -> DownloadSettings {
+    settings
+        .selected_topics
+        .retain(|topic| valid_topics.contains(topic));
+    settings.topics.retain(|topic, value| {
+        if !valid_topics.contains(topic) {
+            return false;
+        }
+        value.start = clean_date_value(value.start.take());
+        value.end = clean_date_value(value.end.take());
+        if let (Some(start), Some(end)) = (&value.start, &value.end) {
+            if let (Some(start_date), Some(end_date)) =
+                (parse_date_string(start), parse_date_string(end))
+            {
+                if start_date > end_date {
+                    value.end = None;
+                }
+            }
+        }
+        true
+    });
+    settings
+}
+
+fn load_download_settings(config: &ServeConfig, topics: &[TopicInfo]) -> DownloadSettings {
+    let bytes = match fs::read(&config.download_settings_path) {
+        Ok(bytes) => bytes,
+        Err(_) => return DownloadSettings::default(),
+    };
+    let parsed: DownloadSettings = match serde_json::from_slice(&bytes) {
+        Ok(settings) => settings,
+        Err(_) => return DownloadSettings::default(),
+    };
+    let valid_topics: HashSet<String> = topics.iter().map(|topic| topic.name.clone()).collect();
+    sanitize_download_settings(parsed, &valid_topics)
+}
+
+fn persist_download_settings(
+    config: &ServeConfig,
+    settings: &DownloadSettings,
+) -> Result<(), String> {
+    if let Some(parent) = config.download_settings_path.parent() {
+        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+    let serialized = serde_json::to_vec_pretty(settings).map_err(|err| err.to_string())?;
+    utils::write_atomic_bytes(&config.download_settings_path, &serialized)
+        .map_err(|err| err.to_string())?;
+    Ok(())
 }
 
 
@@ -1373,11 +1482,19 @@ fn default_context(
     mut kws: HashMap<String, Value>,
 ) -> Value {
     let top_papers = encode_json(papers, config.num_results, &config.thumbs_dir, conn, user_id);
-    let selected_topics = kws
-        .get("selected_topics")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default();
+    let download_settings = load_download_settings(config, &data.topics);
+    let download_selected = download_settings.selected_topics.clone();
+    let mut download_values = Map::new();
+    for (topic, settings) in &download_settings.topics {
+        download_values.insert(
+            topic.clone(),
+            json!({
+                "start": settings.start,
+                "end": settings.end,
+                "published": settings.published,
+            }),
+        );
+    }
     let download_dir = config.pdf_dir.canonicalize().unwrap_or(config.pdf_dir.clone());
     let settings_topics: Vec<Value> = data
         .topics
@@ -1386,7 +1503,8 @@ fn default_context(
             json!({
                 "name": topic.name.clone(),
                 "display_name": topic.display_name.clone(),
-                "selected": selected_topics
+                "selected": download_selected
+
                     .iter()
                     .any(|t| t.as_str() == Some(topic.name.as_str())),
             })
@@ -1430,6 +1548,7 @@ fn default_context(
         "settings_storage_used": get_storage_usage(&download_dir),
         "settings_storage_papers": data.db.len(),
         "settings_download_topics": settings_topics,
+        "settings_download_values": download_values,
         "settings_date_range": {
             "start": data.settings_date_range.start,
             "end": data.settings_date_range.end,
@@ -1889,6 +2008,98 @@ async fn goaway(
     State((_state, _env)): State<(AppState, Arc<Environment<'static>>)>,
 ) -> impl IntoResponse {
     Html("OK".to_string())
+}
+
+fn normalize_date_input(value: Option<String>) -> Result<Option<String>, String> {
+    let Some(raw) = value else {
+        return Ok(None);
+    };
+    let trimmed = raw.trim().to_string();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    if parse_date_string(&trimmed).is_some() {
+        Ok(Some(trimmed))
+    } else {
+        Err(format!("Invalid date value: {}", trimmed))
+    }
+}
+
+async fn update_download_settings(
+    State((state, _env)): State<(AppState, Arc<Environment<'static>>)>,
+    Json(payload): Json<DownloadSettingsPayload>,
+) -> impl IntoResponse {
+    let data = state.data.read().unwrap();
+    let valid_topics: HashSet<String> = data
+        .topics
+        .iter()
+        .map(|topic| topic.name.clone())
+        .collect();
+    for topic in &payload.selected_topics {
+        if !valid_topics.contains(topic) {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": format!("Unknown topic: {}", topic) })),
+            )
+                .into_response();
+        }
+    }
+    let mut settings = DownloadSettings::default();
+    settings.selected_topics = payload.selected_topics;
+
+    for (topic, input) in payload.topics {
+        if !valid_topics.contains(&topic) {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": format!("Unknown topic: {}", topic) })),
+            )
+                .into_response();
+        }
+        let start = match normalize_date_input(input.start) {
+            Ok(value) => value,
+            Err(err) => {
+                return (StatusCode::BAD_REQUEST, Json(json!({ "error": err }))).into_response();
+            }
+        };
+        let end = match normalize_date_input(input.end) {
+            Ok(value) => value,
+            Err(err) => {
+                return (StatusCode::BAD_REQUEST, Json(json!({ "error": err }))).into_response();
+            }
+        };
+        if let (Some(start_date), Some(end_date)) = (
+            start.as_deref().and_then(parse_date_string),
+            end.as_deref().and_then(parse_date_string),
+        ) {
+            if start_date > end_date {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({
+                        "error": format!("Start date cannot be after end date for {}", topic)
+                    })),
+                )
+                    .into_response();
+            }
+        }
+        settings.topics.insert(
+            topic,
+            DownloadTopicSettings {
+                start,
+                end,
+                published: input.published.unwrap_or(false),
+            },
+        );
+    }
+
+    if let Err(err) = persist_download_settings(&state.config, &settings) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": err })),
+        )
+            .into_response();
+    }
+
+    Json(json!({ "ok": true })).into_response()
 }
 
 async fn ingest_status(
