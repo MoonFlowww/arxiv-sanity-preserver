@@ -912,6 +912,31 @@ fn vectorize_documents(
     Ok(vectors)
 }
 
+fn vectorize_document_text(text: &str, meta: &TfidfMeta) -> Vec<f32> {
+    let terms = extract_terms(text);
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for term in terms {
+        *counts.entry(term).or_insert(0) += 1;
+    }
+
+    let mut vector = vec![0.0; meta.vocab.len()];
+    for (term, count) in counts {
+        if let Some(&idx) = meta.vocab.get(&term) {
+            let tf = 1.0 + (count as f32).ln();
+            vector[idx] = tf * meta.idf[idx];
+        }
+    }
+
+    let norm: f32 = vector.iter().map(|val| val * val).sum::<f32>().sqrt();
+    if norm > 0.0 {
+        for val in &mut vector {
+            *val /= norm;
+        }
+    }
+
+    vector
+}
+
 
 fn run_analyze(config: &PipelineConfig) -> Result<(), String> {
     let db_path = Path::new(&config.db_path);

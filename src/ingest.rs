@@ -5,10 +5,12 @@ use std::path::{Path, PathBuf};
 
 use crate::download;
 use crate::{
-    ensure_command_exists, load_db_jsonl, parse_arxiv_url, run_analyze, run_buildsvm,
-    run_pdftotext_for_file, render_thumbnail_for_pdf, utils, write_db_jsonl,
-    IngestSinglePaperArgs, Paper, PipelineConfig,
+    ensure_command_exists, load_db_jsonl, parse_arxiv_url, read_bincode, run_analyze,
+    run_buildsvm, run_pdftotext_for_file, render_thumbnail_for_pdf, utils,
+    vectorize_document_text, write_bincode, write_db_jsonl, IngestSinglePaperArgs, Paper,
+    PipelineConfig, TfidfMatrix, TfidfMeta,
 };
+use crate::hnsw_index::HnswIndex;
 
 fn fetch_paper_metadata(paper_id: &str) -> Result<Paper, String> {
     let base_url = "http://export.arxiv.org/api/query?id_list=";
@@ -105,6 +107,56 @@ fn ensure_thumbnail_for_pdf(pdf_path: &Path, thumb_dir: &Path, tmp_dir: &Path) -
     Ok(())
 }
 
+fn update_incremental_tfidf(
+    config: &PipelineConfig,
+    txt_path: &Path,
+    paper: &Paper,
+) -> Result<(), String> {
+    // Incremental TF-IDF policy: keep the existing IDF fixed for single-paper ingest.
+    // Full recomputation (including IDF refresh) is handled by run_analyze.
+    let meta_contents = fs::read_to_string(&config.tfidf_meta_path)
+        .map_err(|err| format!("Failed to read {}: {err}", config.tfidf_meta_path))?;
+    let mut meta: TfidfMeta = serde_json::from_str(&meta_contents)
+        .map_err(|err| format!("Failed to parse tfidf meta: {err}"))?;
+    let mut tfidf: TfidfMatrix = read_bincode(Path::new(&config.tfidf_path))?;
+
+    let text =
+        fs::read_to_string(txt_path).map_err(|err| format!("Failed to read {txt_path:?}: {err}"))?;
+    let vector = vectorize_document_text(&text, &meta);
+    let pid = format!("{}v{}", paper.id, paper.version);
+
+    if let Some(&idx) = meta.ptoi.get(&pid) {
+        if let Some(slot) = tfidf.vectors.get_mut(idx) {
+            *slot = vector;
+        } else {
+            return Err(format!(
+                "TF-IDF index mismatch: {} points to missing vector",
+                pid
+            ));
+        }
+    } else {
+        let idx = tfidf.vectors.len();
+        tfidf.vectors.push(vector);
+        meta.pids.push(pid.clone());
+        meta.ptoi.insert(pid, idx);
+    }
+
+    println!("writing {}", config.tfidf_path);
+    write_bincode(Path::new(&config.tfidf_path), &tfidf)?;
+    println!("writing {}", config.tfidf_meta_path);
+    let meta_json = serde_json::to_string_pretty(&meta)
+        .map_err(|err| format!("Failed to serialize meta: {err}"))?;
+    fs::write(&config.tfidf_meta_path, meta_json)
+        .map_err(|err| format!("Failed to write {}: {err}", config.tfidf_meta_path))?;
+
+    println!("building HNSW index...");
+    let hnsw_index = HnswIndex::build(&tfidf.vectors, &meta.pids)?;
+    println!("writing {}", config.hnsw_index_path);
+    write_bincode(Path::new(&config.hnsw_index_path), &hnsw_index)?;
+
+    Ok(())
+}
+
 pub fn run_ingest_single_paper(
     args: &IngestSinglePaperArgs,
     config: &PipelineConfig,
@@ -161,7 +213,9 @@ pub fn run_ingest_single_paper(
         run_buildsvm(config)?;
         crate::cache::run_make_cache(config_path)?;
     } else {
-        println!("Skipping cache recompute as requested.");
+        println!("Updating TF-IDF vector for single-paper ingest...");
+        update_incremental_tfidf(config, &txt_path, &paper)?;
+        println!("Skipping full cache recompute as requested.");
     }
 
     Ok(())
