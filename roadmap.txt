@@ -1,0 +1,16 @@
+- Remove current "score" citation metric (not taking the popularity of field of papers
+    - Checkout FWCI / Citation Normalized Percentiled / Score per topic
+
+- Save is_Published/is_Accepted from OpenAlex for search-filter
+
+- move OpenAlex API right behind fetch_papers to filter "published" from download-filters
+
+- Create UI for saved papers
+
+- Create UI for SVM from saved papers
+
+- Add research outside of database via OpenAlex + ability to save redirect links of papers (if come from openalex && not downloaded)
+
+- Filter publication types (Book-chapter/Journal/...) and host_organization_lineage_names (Springer/ ..)
+
+- Differentiate Cross/Multi topics
