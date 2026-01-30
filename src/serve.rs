@@ -968,6 +968,13 @@ fn publication_statuses(paper: &Value) -> Vec<String> {
         statuses.insert("accepted".to_string());
     }
     if paper
+        .get("is_published")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        statuses.insert("published".to_string());
+    }
+    if paper
         .get("presented")
         .and_then(|v| v.as_bool())
         .unwrap_or(false)

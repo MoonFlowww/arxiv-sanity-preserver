@@ -814,6 +814,24 @@
                     />
                     <span>Presented at conference</span>
                 </label>
+                <label class="checkbox">
+                    <input
+                            type="checkbox"
+                            name="publication_status"
+                            value="accepted"
+                            {% if 'accepted' in publication_statuses %}checked{% endif %}
+                    />
+                    <span>Accepted</span>
+                </label>
+                <label class="checkbox">
+                    <input
+                            type="checkbox"
+                            name="publication_status"
+                            value="published"
+                            {% if 'published' in publication_statuses %}checked{% endif %}
+                    />
+                    <span>Published</span>
+                </label>
             </div>
 
 
