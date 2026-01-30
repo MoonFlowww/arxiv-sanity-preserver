@@ -1509,9 +1509,8 @@ fn default_context(
                 "name": topic.name.clone(),
                 "display_name": topic.display_name.clone(),
                 "selected": download_selected
-
                     .iter()
-                    .any(|t| t.as_str() == Some(topic.name.as_str())),
+                    .any(|t| t == &topic.name),
             })
         })
         .collect();

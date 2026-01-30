@@ -171,6 +171,9 @@ pub fn run_migrate_db(args: &MigrateDbArgs) -> Result<(), String> {
             abstract_text,
             updated,
             categories,
+            citation_count: None,
+            is_accepted: None,
+            is_published: None,
         });
     }
 

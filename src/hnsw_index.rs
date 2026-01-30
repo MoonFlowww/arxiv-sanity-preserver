@@ -7,14 +7,18 @@ const HNSW_NUM_LAYERS: usize = 16;
 const HNSW_EF_CONSTRUCTION: usize = 200;
 const HNSW_EF_SEARCH: usize = 200;
 
-#[derive(Debug)]
 pub struct HnswIndex {
-    hnsw: Hnsw<f32, DistCosine>,
+    hnsw: Hnsw<'static, f32, DistCosine>,
     pids: Vec<String>,
     ptoi: HashMap<String, usize>,
     vectors: Vec<Vec<f32>>,
 }
-
+impl Clone for HnswIndex {
+    fn clone(&self) -> Self {
+        HnswIndex::build(&self.vectors, &self.pids)
+            .expect("Failed to rebuild HNSW index while cloning")
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 struct HnswIndexData {
@@ -54,7 +58,7 @@ impl HnswIndex {
                 pids.len()
             ));
         }
-        let mut hnsw = Hnsw::<f32, DistCosine>::new(
+        let hnsw = Hnsw::<f32, DistCosine>::new(
             HNSW_MAX_CONNECTIONS,
             vectors.len(),
             HNSW_NUM_LAYERS,
@@ -63,7 +67,7 @@ impl HnswIndex {
         );
 
         for (idx, vector) in vectors.iter().enumerate() {
-            hnsw.insert((idx, vector.clone()));
+            hnsw.insert((vector.as_slice(), idx));
             if idx % 200 == 0 {
                 println!("{idx}/{}...", vectors.len());
             }
@@ -91,7 +95,7 @@ impl HnswIndex {
         self.vectors.push(vector.clone());
         self.pids.push(pid.clone());
         self.ptoi.insert(pid, idx);
-        self.hnsw.insert((idx, vector));
+        self.hnsw.insert((vector.as_slice(), idx));
         Ok(())
     }
 
@@ -100,8 +104,7 @@ impl HnswIndex {
     }
 
     pub fn find_neighbors(&self, pid: &str, k: usize) -> Option<Vec<String>> {
-        let resolved = self.resolve_pid(pid)?;
-        let idx = *self.ptoi.get(resolved)?;
+        let idx = self.resolve_pid(pid)?;
         let query = &self.vectors[idx];
         let neighbors = self.hnsw.search(query, k.min(self.pids.len()), HNSW_EF_SEARCH);
         let mut out = Vec::new();
@@ -113,10 +116,10 @@ impl HnswIndex {
         Some(out)
     }
 
-    fn resolve_pid(&self, pid: &str) -> Option<&str> {
-        if self.ptoi.contains_key(pid) {
-            return Some(pid);
+    fn resolve_pid(&self, pid: &str) -> Option<usize> {
+        if let Some(idx) = self.ptoi.get(pid) {
+            return Some(*idx);
         }
-        self.pids.iter().find(|p| p.contains(pid)).map(String::as_str)
+        self.pids.iter().position(|p| p.contains(pid))
     }
 }

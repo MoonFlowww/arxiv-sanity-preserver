@@ -62,6 +62,9 @@ fn fetch_paper_metadata(paper_id: &str) -> Result<Paper, String> {
         abstract_text,
         updated,
         categories,
+        citation_count: None,
+        is_accepted: None,
+        is_published: None,
     })
 }
 
@@ -129,7 +132,7 @@ fn update_incremental_tfidf(
 
     if let Some(&idx) = meta.ptoi.get(&pid) {
         if let Some(slot) = tfidf.vectors.get_mut(idx) {
-            *slot = vector;
+            *slot = vector.clone();
         } else {
             return Err(format!(
                 "TF-IDF index mismatch: {} points to missing vector",
@@ -138,9 +141,9 @@ fn update_incremental_tfidf(
         }
     } else {
         let idx = tfidf.vectors.len();
-        tfidf.vectors.push(vector);
+        tfidf.vectors.push(vector.clone());
         meta.pids.push(pid.clone());
-        meta.ptoi.insert(pid, idx);
+        meta.ptoi.insert(pid.clone(), idx);
     }
 
     println!("writing {}", config.tfidf_path);
@@ -153,7 +156,7 @@ fn update_incremental_tfidf(
 
     let hnsw_index_path = Path::new(&config.hnsw_index_path);
     let mut hnsw_index = if hnsw_index_path.exists() {
-        match read_bincode(hnsw_index_path) {
+        match read_bincode::<HnswIndex>(hnsw_index_path) {
             Ok(index) => Some(index),
             Err(err) => {
                 eprintln!(
