@@ -1,7 +1,6 @@
 
 
 cargo build --release
-sqlite3 .pipeline/as.db < schema.sql
 
 
 ./target/release/arxiv_sanity_pipeline fetch-papers --category-counts "cs.AI=20,cs.CL=12"
@@ -9,6 +8,7 @@ sqlite3 .pipeline/as.db < schema.sql
 ./target/release/arxiv_sanity_pipeline parse-pdf-to-text
 ./target/release/arxiv_sanity_pipeline thumb-pdf
 ./target/release/arxiv_sanity_pipeline analyze
+sqlite3 .pipeline/as.db < schema.sql
 ./target/release/arxiv_sanity_pipeline buildsvm
 ./target/release/arxiv_sanity_pipeline make-cache
 ./target/release/arxiv_sanity_pipeline serve --port 5000

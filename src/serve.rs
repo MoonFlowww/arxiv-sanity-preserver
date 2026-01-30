@@ -257,6 +257,9 @@ pub async fn run_with_args(args: ServeArgs) -> Result<(), Box<dyn std::error::Er
         let json = serde_json::to_string(&value).unwrap_or_else(|_| "null".to_string());
         MiniValue::from_safe_string(json)
     });
+    env.add_filter("truncate_topic_name", |value: String, max_len: usize| {
+        truncate_topic_name(&value, max_len)
+    });
     env.add_function("url_for", |endpoint: String, filename: Option<String>| {
         if endpoint == "static" {
             if let Some(name) = filename {
@@ -301,6 +304,26 @@ pub async fn run_with_args(args: ServeArgs) -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
+fn truncate_topic_name(name: &str, max_len: usize) -> String {
+    if name.chars().count() <= max_len {
+        return name.to_string();
+    }
+
+    let truncated_candidate: String = name.chars().take(max_len).collect();
+    let trimmed = match truncated_candidate.rsplit_once(' ') {
+        Some((head, _)) => head,
+        None => truncated_candidate.as_str(),
+    };
+    let trimmed = trimmed.trim_end();
+    let truncated = if trimmed.is_empty() {
+        truncated_candidate.as_str()
+    } else {
+        trimmed
+    };
+    format!("{truncated}...")
+}
+
+
 fn ensure_database(config: &ServeConfig) -> Result<(), io::Error> {
     if !config.database_path.exists() {
         println!("did not find as.db, creating an empty database from embedded schema...");
@@ -313,12 +336,20 @@ fn ensure_database(config: &ServeConfig) -> Result<(), io::Error> {
 }
 
 fn refresh_serving_data(config: &ServeConfig) -> Result<ServeData, Box<dyn std::error::Error>> {
-    println!("loading the paper database {:?}", config.db_serve_path);
+    println!(
+        "loading the paper database from {:?}",
+        config.db_serve_path
+    );
     let db_value = load_pickle_or_json_value(&config.db_serve_path, None)?;
     let mut db = value_to_map(db_value)?;
     ensure_impact_scores(&mut db);
 
+    println!(
+        "loading tfidf metadata from {:?} (json fallback {:?})",
+        config.meta_path, config.tfidf_meta_json_path
+    );
     let _meta = load_pickle_or_json_value(&config.meta_path, Some(&config.tfidf_meta_json_path))?;
+    println!("loading HNSW index from {:?}", config.hnsw_index_path);
     let hnsw_index = load_hnsw_index(&config.hnsw_index_path)?;
 
     println!("loading user recommendations {:?}", config.user_sim_path);
@@ -457,8 +488,13 @@ fn load_pickle_or_json_value(
 ) -> Result<Value, Box<dyn std::error::Error>> {
     if pickle_path.exists() {
         let pickle_result = (|| -> Result<Value, Box<dyn std::error::Error>> {
-            let bytes = fs::read(pickle_path)?;
-            let value: PickleValue = serde_pickle::from_slice(&bytes, DeOptions::default())?;
+            let bytes = fs::read(pickle_path).map_err(|err| {
+                format!("Failed to read {}: {}", pickle_path.display(), err)
+            })?;
+            let value: PickleValue =
+                serde_pickle::from_slice(&bytes, DeOptions::default()).map_err(|err| {
+                    format!("Failed to decode {}: {}", pickle_path.display(), err)
+                })?;
             Ok(pickle_to_json(value))
         })();
         match pickle_result {
@@ -469,8 +505,11 @@ fn load_pickle_or_json_value(
             Err(pickle_err) => {
                 if let Some(path) = json_path {
                     let json_result = (|| -> Result<Value, Box<dyn std::error::Error>> {
-                        let json_bytes = fs::read(path)?;
-                        Ok(serde_json::from_slice(&json_bytes)?)
+                        let json_bytes = fs::read(path)
+                            .map_err(|err| format!("Failed to read {}: {}", path.display(), err))?;
+                        Ok(serde_json::from_slice(&json_bytes).map_err(|err| {
+                            format!("Failed to decode {}: {}", path.display(), err)
+                        })?)
                     })();
                     match json_result {
                         Ok(value) => {
@@ -496,8 +535,10 @@ fn load_pickle_or_json_value(
             }
         }
     } else if let Some(path) = json_path {
-        let json_bytes = fs::read(path)?;
-        let value = serde_json::from_slice(&json_bytes)?;
+        let json_bytes = fs::read(path)
+            .map_err(|err| format!("Failed to read {}: {}", path.display(), err))?;
+        let value = serde_json::from_slice(&json_bytes)
+            .map_err(|err| format!("Failed to decode {}: {}", path.display(), err))?;
         println!("loaded data from JSON {:?}", path);
         Ok(value)
     } else {
@@ -514,12 +555,19 @@ fn load_pickle_or_json_value_optional(
     json_path: &Path,
 ) -> Result<Option<Value>, Box<dyn std::error::Error>> {
     if pickle_path.exists() {
-        let bytes = fs::read(pickle_path)?;
-        let value: PickleValue = serde_pickle::from_slice(&bytes, DeOptions::default())?;
+        let bytes = fs::read(pickle_path)
+            .map_err(|err| format!("Failed to read {}: {}", pickle_path.display(), err))?;
+        let value: PickleValue =
+            serde_pickle::from_slice(&bytes, DeOptions::default()).map_err(|err| {
+                format!("Failed to decode {}: {}", pickle_path.display(), err)
+            })?;
         Ok(Some(pickle_to_json(value)))
     } else if json_path.exists() {
-        let json_bytes = fs::read(json_path)?;
-        Ok(Some(serde_json::from_slice(&json_bytes)?))
+        let json_bytes = fs::read(json_path)
+            .map_err(|err| format!("Failed to read {}: {}", json_path.display(), err))?;
+        Ok(Some(serde_json::from_slice(&json_bytes).map_err(|err| {
+            format!("Failed to decode {}: {}", json_path.display(), err)
+        })?))
     } else {
         Ok(None)
     }
@@ -1194,18 +1242,21 @@ fn papers_search(
     out
 }
 
-fn papers_similar(data: &ServeData, pid: &str) -> Vec<Value> {
+fn papers_similar(data: &ServeData, pid: &str) -> Result<Vec<Value>, String> {
     let rawpid = utils::strip_version(pid);
     if !data.db.contains_key(&rawpid) {
-        return vec![];
+        return Ok(vec![]);
     }
-    if let Some(similar) = data.hnsw_index.find_neighbors(pid, SIMILAR_RESULTS) {
-        return similar
-            .iter()
-            .filter_map(|k| data.db.get(&utils::strip_version(k)).cloned())
-            .collect();
-    }
-    Vec::new()
+    let similar = data
+        .hnsw_index
+        .find_neighbors(pid, SIMILAR_RESULTS)
+        .ok_or_else(|| {
+            "HNSW index is required for similarity search but is not loaded.".to_string()
+        })?;
+    Ok(similar
+        .iter()
+        .filter_map(|k| data.db.get(&utils::strip_version(k)).cloned())
+        .collect())
 }
 
 fn papers_from_library(
@@ -1438,31 +1489,34 @@ fn default_context(
     let top_papers = encode_json(papers, config.num_results, &config.thumbs_dir, conn, user_id);
     let download_settings = load_download_settings(config, &data.topics);
     let download_selected = download_settings.selected_topics.clone();
-    let mut download_values = Map::new();
-    for (topic, settings) in &download_settings.topics {
-        download_values.insert(
-            topic.clone(),
-            json!({
-                "start": settings.start,
-                "end": settings.end,
-                "published": settings.published,
-            }),
-        );
-    }
     let download_dir = config.pdf_dir.canonicalize().unwrap_or(config.pdf_dir.clone());
     let settings_topics: Vec<Value> = data
         .topics
         .iter()
         .map(|topic| {
+            let download_values = download_settings
+                .topics
+                .get(&topic.name)
+                .map(|settings| {
+                    json!({
+                        "start": settings.start,
+                        "end": settings.end,
+                        "published": settings.published,
+                    })
+                })
+                .unwrap_or(Value::Null);
             json!({
                 "name": topic.name.clone(),
                 "display_name": topic.display_name.clone(),
                 "selected": download_selected
                     .iter()
                     .any(|t| t == &topic.name),
+                "download_values": download_values,
             })
         })
         .collect();
+    let settings_storage_papers = data.db.len();
+    let settings_storage_papers_display = format!("{:,}", settings_storage_papers);
     let mut ans = json!({
         "papers": top_papers,
         "numresults": papers.len(),
@@ -1487,9 +1541,9 @@ fn default_context(
         "sort_order": "desc",
         "settings_download_dir": download_dir.to_string_lossy().to_string(),
         "settings_storage_used": get_storage_usage(&download_dir),
-        "settings_storage_papers": data.db.len(),
+        "settings_storage_papers": settings_storage_papers,
+        "settings_storage_papers_display": settings_storage_papers_display,
         "settings_download_topics": settings_topics,
-        "settings_download_values": download_values,
         "settings_date_range": {
             "start": data.settings_date_range.start,
             "end": data.settings_date_range.end,
@@ -1597,7 +1651,10 @@ async fn rank(
         return Html("".to_string()).into_response();
     }
     let data = state.data.read().unwrap().clone();
-    let papers = papers_similar(&data, &request_pid);
+    let papers = match papers_similar(&data, &request_pid) {
+        Ok(papers) => papers,
+        Err(err) => return (StatusCode::SERVICE_UNAVAILABLE, err).into_response(),
+    };
     match build_context_response(
         &state,
         &env,

@@ -711,19 +711,6 @@
     </a>
 </div>
 
-<!-- FLASHES -->
-{% with flashes = get_flashed_messages() %}
-{% if flashes %}
-<div id="flashesdiv">
-    <ul class="flashes">
-        {% for message in flashes %}
-        <li>{{ message }}</li>
-        {% endfor %}
-    </ul>
-</div>
-{% endif %}
-{% endwith %}
-
 <!-- MAIN LAYOUT: SIDEBAR + CONTENT -->
 <div class="layout-container">
 
@@ -765,6 +752,7 @@
                         {% else %}
                         {% set truncated_name = full_name %}
                         {% endif %}
+                        {% set truncated_name = full_name|truncate_topic_name(max_label_length) %}
                         <label class="tag">
                             <input
                                     type="checkbox"
@@ -1063,7 +1051,7 @@
                             {% for topic in settings_download_topics %}
                             {% set topic_stats = settings_topic_stats | selectattr('display_name', 'equalto', topic.display_name) | list %}
                             {% set topic_stat = topic_stats[0] if topic_stats else None %}
-                            {% set download_values = settings_download_values.get(topic.name) %}
+                            {% set download_values = topic.download_values %}
                             <div class="settings-table-row settings-download-row" data-topic="{{ topic.name }}">
                                 <span>{{ topic.display_name }}</span>
                                 <span>{{ topic_stat.paper_count_display if topic_stat else '—' }}</span>
@@ -1099,7 +1087,7 @@
                     <p>Review cached content and reclaim space.</p>
                     <div class="settings-row">
                         <span>Cached papers</span>
-                        <span class="settings-value">{{ "{:,}".format(settings_storage_papers) }} items</span>
+                        <span class="settings-value">{{ settings_storage_papers_display }} items</span>
                     </div>
                     <div class="settings-row">
                         <span>Storage used</span>
