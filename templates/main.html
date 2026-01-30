@@ -144,6 +144,7 @@
             var showOverlay = function () {
                 overlay.classList.add('visible');
                 overlay.setAttribute('aria-hidden', 'false');
+                startHealthPolling();
                 if (tabButtons.length) {
                     try {
                         tabButtons[0].focus({ preventScroll: true });
@@ -156,6 +157,7 @@
             var hideOverlay = function () {
                 overlay.classList.remove('visible');
                 overlay.setAttribute('aria-hidden', 'true');
+                stopHealthPolling();
                 openButton.focus();
                 if (window.resetSettingsTopicSearch) {
                     window.resetSettingsTopicSearch();
@@ -318,6 +320,52 @@
                     });
                 });
                 saveButton.dataset.bound = 'true';
+            }
+        }
+        var healthPoller = null;
+        function updateHealthStatus(connected, details) {
+            var statusValue = document.getElementById('settings-health-value');
+            var detailValue = document.getElementById('settings-health-details');
+            if (!statusValue) {
+                return;
+            }
+            statusValue.textContent = connected ? 'Connected' : 'Disconnected';
+            statusValue.classList.toggle('is-success', connected);
+            statusValue.classList.toggle('is-error', !connected);
+            if (detailValue) {
+                detailValue.textContent = details || '';
+            }
+        }
+        function checkHealthStatus() {
+            if (!document.getElementById('settings-health-value')) {
+                return;
+            }
+            fetch('/health', { cache: 'no-store' })
+                .then(function (response) {
+                    if (!response.ok) {
+                        throw new Error('Health check failed');
+                    }
+                    return response.json();
+                })
+                .then(function (data) {
+                    var detail = data && data.version ? 'v' + data.version : '';
+                    updateHealthStatus(Boolean(data && data.ok), detail);
+                })
+                .catch(function () {
+                    updateHealthStatus(false, '');
+                });
+        }
+        function startHealthPolling() {
+            if (healthPoller) {
+                return;
+            }
+            checkHealthStatus();
+            healthPoller = setInterval(checkHealthStatus, 15000);
+        }
+        function stopHealthPolling() {
+            if (healthPoller) {
+                clearInterval(healthPoller);
+                healthPoller = null;
             }
         }
     </script>
@@ -927,6 +975,13 @@
                     <div class="settings-row">
                         <span>Theme</span>
                         <span class="settings-value" id="settings-theme-value">System</span>
+                    </div>
+                    <div class="settings-row">
+                        <span>Server status</span>
+                        <span class="settings-value">
+                            <span id="settings-health-value">Checking...</span>
+                            <span class="settings-subvalue" id="settings-health-details"></span>
+                        </span>
                     </div>
                 </div>
             </section>

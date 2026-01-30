@@ -9,7 +9,6 @@ use clap::Parser;
 use chrono::{Datelike, NaiveDate};
 use minijinja::value::Value as MiniValue;
 use minijinja::Environment;
-use rand::Rng;
 use regex::Regex;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Map, Value};
@@ -98,7 +97,6 @@ struct ServeConfig {
     database_path: PathBuf,
     ingest_jobs_dir: PathBuf,
     tmp_dir: PathBuf,
-    beg_for_hosting_money: bool,
     download_settings_path: PathBuf,
 }
 
@@ -128,7 +126,6 @@ impl ServeConfig {
             ingest_jobs_dir: pipeline_path("ingest_jobs"),
             tmp_dir: pipeline_path("tmp"),
             download_settings_path: pipeline_path("download_settings.json"),
-            beg_for_hosting_money: true,
         }
     }
 }
@@ -280,6 +277,7 @@ pub async fn run_with_args(args: ServeArgs) -> Result<(), Box<dyn std::error::Er
 
     let app = Router::new()
         .route("/", get(intmain))
+        .route("/health", get(health_check))
         .route("/goaway", post(goaway))
         .route("/ingest/status/:job_id", get(ingest_status))
         .route("/ingest/recompute_status", get(ingest_recompute_status))
@@ -1510,24 +1508,12 @@ fn default_context(
             })
         })
         .collect();
-    let mut show_prompt = "no".to_string();
-    if config.beg_for_hosting_money && !data.db.is_empty() {
-        let mut rng = rand::thread_rng();
-        if rng.gen::<f64>() < 0.05 {
-            if let Ok(count) = library_count(conn, user_id) {
-                if count > 0 {
-                    show_prompt = "yes".to_string();
-                }
-            }
-        }
-    }
     let mut ans = json!({
         "papers": top_papers,
         "numresults": papers.len(),
         "totpapers": data.db.len(),
         "tweets": [],
         "msg": "",
-        "show_prompt": show_prompt,
         "topics": data.topics.iter().map(|topic| {
             json!({
                 "name": topic.name.clone(),
@@ -2008,6 +1994,15 @@ async fn goaway(
     State((_state, _env)): State<(AppState, Arc<Environment<'static>>)>,
 ) -> impl IntoResponse {
     Html("OK".to_string())
+}
+async fn health_check(
+    State((_state, _env)): State<(AppState, Arc<Environment<'static>>)>,
+) -> impl IntoResponse {
+    Json(json!({
+        "ok": true,
+        "version": env!("CARGO_PKG_VERSION"),
+    }))
+        .into_response()
 }
 
 fn normalize_date_input(value: Option<String>) -> Result<Option<String>, String> {
