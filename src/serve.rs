@@ -260,6 +260,9 @@ pub async fn run_with_args(args: ServeArgs) -> Result<(), Box<dyn std::error::Er
     env.add_filter("truncate_topic_name", |value: String, max_len: usize| {
         truncate_topic_name(&value, max_len)
     });
+    env.add_function("truncate_topic_name", |value: String, max_len: usize| {
+        truncate_topic_name(&value, max_len)
+    });
     env.add_function("url_for", |endpoint: String, filename: Option<String>| {
         if endpoint == "static" {
             if let Some(name) = filename {
