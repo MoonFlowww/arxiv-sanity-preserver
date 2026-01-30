@@ -188,7 +188,7 @@ struct DownloadSettingsPayload {
 #[derive(Clone)]
 struct ServeData {
     db: HashMap<String, Value>,
-    hnsw_index: Option<HnswIndex>,
+    hnsw_index: HnswIndex,
     user_sim: HashMap<i64, Vec<String>>,
     date_sorted_pids: Vec<String>,
     top_sorted_pids: Vec<String>,
@@ -319,7 +319,7 @@ fn refresh_serving_data(config: &ServeConfig) -> Result<ServeData, Box<dyn std::
     ensure_impact_scores(&mut db);
 
     let _meta = load_pickle_or_json_value(&config.meta_path, Some(&config.tfidf_meta_json_path))?;
-    let hnsw_index = load_hnsw_index(&config.hnsw_index_path);
+    let hnsw_index = load_hnsw_index(&config.hnsw_index_path)?;
 
     println!("loading user recommendations {:?}", config.user_sim_path);
     let user_sim_value =
@@ -431,33 +431,23 @@ fn persist_download_settings(
 }
 
 
-fn load_hnsw_index(path: &Path) -> Option<HnswIndex> {
+fn load_hnsw_index(path: &Path) -> Result<HnswIndex, Box<dyn std::error::Error>> {
     if !path.exists() {
-        return None;
+        return Err(format!("Missing HNSW index at {}", path.display()).into());
     }
-    let bytes = match fs::read(path) {
-        Ok(bytes) => bytes,
-        Err(err) => {
-            eprintln!("Failed to read {:?}: {}", path, err);
-            return None;
-        }
-    };
-    let index: HnswIndex = match bincode::deserialize(&bytes) {
-        Ok(index) => index,
-        Err(err) => {
-            eprintln!("Failed to decode {:?}: {}", path, err);
-            return None;
-        }
-    };
-    println!("loaded HNSW index from {:?}", path);
-    Some(index)
+    let bytes = fs::read(path)
+        .map_err(|err| format!("Failed to read {}: {}", path.display(), err))?;
+    let index: HnswIndex = bincode::deserialize(&bytes)
+        .map_err(|err| format!("Failed to decode {}: {}", path.display(), err))?;
+    println!("loaded HNSW index from {}", path.display());
+    Ok(index)
 }
 
-fn refresh_hnsw_in_state(state: &AppState) {
-    if let Some(index) = load_hnsw_index(&state.config.hnsw_index_path) {
-        let mut data = state.data.write().unwrap();
-        data.hnsw_index = Some(index);
-    }
+fn refresh_hnsw_in_state(state: &AppState) -> Result<(), Box<dyn std::error::Error>> {
+    let index = load_hnsw_index(&state.config.hnsw_index_path)?;
+    let mut data = state.data.write().unwrap();
+    data.hnsw_index = index;
+    Ok(())
 }
 
 
@@ -1209,15 +1199,13 @@ fn papers_similar(data: &ServeData, pid: &str) -> Vec<Value> {
     if !data.db.contains_key(&rawpid) {
         return vec![];
     }
-    if let Some(hnsw_index) = &data.hnsw_index {
-        if let Some(similar) = hnsw_index.find_neighbors(pid, SIMILAR_RESULTS) {
-            return similar
-                .iter()
-                .filter_map(|k| data.db.get(&utils::strip_version(k)).cloned())
-                .collect();
-        }
+    if let Some(similar) = data.hnsw_index.find_neighbors(pid, SIMILAR_RESULTS) {
+        return similar
+            .iter()
+            .filter_map(|k| data.db.get(&utils::strip_version(k)).cloned())
+            .collect();
     }
-    vec![data.db.get(&rawpid).cloned().unwrap()]
+    Vec::new()
 }
 
 fn papers_from_library(
@@ -2646,7 +2634,9 @@ fn run_ingest_job(state: &AppState, job_id: &str, paper_id: &str) {
         false,
         warning,
     );
-    refresh_hnsw_in_state(state);
+    if let Err(err) = refresh_hnsw_in_state(state) {
+        eprintln!("Failed to refresh HNSW index: {}", err);
+    }
     let recompute_state = get_recompute_status(state);
     if recompute_state.status == "running" {
         update_ingest_job(

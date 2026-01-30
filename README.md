@@ -1,7 +1,7 @@
 # arxiv sanity preserver
 
 A Rust-first rebuild of arxiv-sanity that bundles the data pipeline and the web UI in one CLI. It fetches arXiv
-metadata, downloads PDFs, extracts text, builds TF‑IDF similarity + recommendations, and serves the Axum web app.
+metadata, downloads PDFs, extracts text, builds TF‑IDF vectors + an HNSW similarity index, and serves the Axum web app.
 Everything is stored in a local pipeline directory (default: `.pipeline`).
 
 ![user interface](https://raw.github.com/karpathy/arxiv-sanity-preserver/master/ui.jpeg)

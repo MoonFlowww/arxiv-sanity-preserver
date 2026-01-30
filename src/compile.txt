@@ -1,11 +1,16 @@
-# from repo root
-cargo run -p arxiv_sanity_pipeline --bin arxiv_sanity_pipeline -- fetch-papers --category-counts "cs.AI=20,cs.CL=12"
-cargo run -p arxiv_sanity_pipeline --bin arxiv_sanity_pipeline -- download-pdfs
-cargo run -p arxiv_sanity_pipeline --bin arxiv_sanity_pipeline -- parse-pdf-to-text
-cargo run -p arxiv_sanity_pipeline --bin arxiv_sanity_pipeline -- thumb-pdf
-cargo run -p arxiv_sanity_pipeline --bin arxiv_sanity_pipeline -- analyze
-cargo run -p arxiv_sanity_pipeline --bin arxiv_sanity_pipeline -- buildsvm
-cargo run -p arxiv_sanity_pipeline --bin arxiv_sanity_pipeline -- make-cache
 
 
-cargo run -p arxiv_sanity_pipeline --bin arxiv_sanity_pipeline -- reset-pipeline --force
+cargo build --release
+sqlite3 .pipeline/as.db < schema.sql
+
+
+./target/release/arxiv_sanity_pipeline fetch-papers --category-counts "cs.AI=20,cs.CL=12"
+./target/release/arxiv_sanity_pipeline download-pdfs
+./target/release/arxiv_sanity_pipeline parse-pdf-to-text
+./target/release/arxiv_sanity_pipeline thumb-pdf
+./target/release/arxiv_sanity_pipeline analyze
+./target/release/arxiv_sanity_pipeline buildsvm
+./target/release/arxiv_sanity_pipeline make-cache
+./target/release/arxiv_sanity_pipeline serve --port 5000
+
+./target/release/arxiv_sanity_pipeline reset-pipeline --force
