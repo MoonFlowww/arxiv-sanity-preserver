@@ -14,3 +14,12 @@ create table library
     user_id     integer not null,
     update_time integer
 );
+drop table if exists settings;
+create table settings
+(
+    user_id     integer not null,
+    key         text    not null,
+    value       text    not null,
+    update_time integer,
+    primary key (user_id, key)
+);

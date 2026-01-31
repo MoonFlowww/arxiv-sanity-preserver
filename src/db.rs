@@ -36,6 +36,14 @@ create table if not exists library
     user_id     integer not null,
     update_time integer
 );
+create table if not exists settings
+(
+    user_id     integer not null,
+    key         text    not null,
+    value       text    not null,
+    update_time integer,
+    primary key (user_id, key)
+);
 "#;
 
 impl Database {

@@ -34,7 +34,7 @@ const SINGLE_USER_ID: i64 = 1;
 const RECOMPUTE_STALE_SECONDS: i64 = 30 * 60;
 const DEFAULT_PIPELINE_DIR: &str = ".pipeline";
 const SIMILAR_RESULTS: usize = 50;
-
+const SETTINGS_KEY_SHOW_PROMPT: &str = "show_prompt";
 fn pipeline_path(entry: &str) -> PathBuf {
     Path::new(DEFAULT_PIPELINE_DIR).join(entry)
 }
@@ -96,6 +96,7 @@ struct ServeConfig {
     ingest_jobs_dir: PathBuf,
     tmp_dir: PathBuf,
     download_settings_path: PathBuf,
+    ui_settings_path: PathBuf,
 }
 
 impl ServeConfig {
@@ -122,6 +123,7 @@ impl ServeConfig {
             ingest_jobs_dir: pipeline_path("ingest_jobs"),
             tmp_dir: pipeline_path("tmp"),
             download_settings_path: pipeline_path("download_settings.json"),
+            ui_settings_path: pipeline_path("ui_settings.json"),
         }
     }
 }
@@ -162,6 +164,13 @@ struct DownloadSettings {
     selected_topics: Vec<String>,
     topics: HashMap<String, DownloadTopicSettings>,
 }
+
+
+#[derive(Debug, Clone, serde::Deserialize)]
+struct UiSettings {
+    show_prompt: Option<String>,
+}
+
 
 impl Default for DownloadSettings {
     fn default() -> Self {
@@ -239,19 +248,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     run_with_args(args).await
 }
 
-pub async fn run_with_args(args: ServeArgs) -> Result<(), Box<dyn std::error::Error>> {
-    let config = ServeConfig::new(&args);
-    ensure_database(&config)?;
-    let data = refresh_serving_data(&config)?;
-
-    let state = AppState {
-        config: config.clone(),
-        data: Arc::new(RwLock::new(data)),
-        ingest_jobs: Arc::new(Mutex::new(HashMap::new())),
-        recompute_status: Arc::new(Mutex::new(None)),
-        recompute_thread: Arc::new(Mutex::new(None)),
-    };
-
+fn build_template_env() -> Environment<'static> {
     let mut env = Environment::new();
     env.add_filter("tojson", |value: MiniValue| {
         let json = serde_json::to_string(&value).unwrap_or_else(|_| "null".to_string());
@@ -275,6 +272,23 @@ pub async fn run_with_args(args: ServeArgs) -> Result<(), Box<dyn std::error::Er
         }
     });
     env.set_loader(minijinja::path_loader("templates"));
+    env
+}
+
+pub async fn run_with_args(args: ServeArgs) -> Result<(), Box<dyn std::error::Error>> {
+    let config = ServeConfig::new(&args);
+    ensure_database(&config)?;
+    let data = refresh_serving_data(&config)?;
+
+    let state = AppState {
+        config: config.clone(),
+        data: Arc::new(RwLock::new(data)),
+        ingest_jobs: Arc::new(Mutex::new(HashMap::new())),
+        recompute_status: Arc::new(Mutex::new(None)),
+        recompute_thread: Arc::new(Mutex::new(None)),
+    };
+
+    let env = build_template_env();
 
     let app = Router::new()
         .route("/", get(intmain))
@@ -449,6 +463,55 @@ fn load_download_settings(config: &ServeConfig, topics: &[TopicInfo]) -> Downloa
     };
     let valid_topics: HashSet<String> = topics.iter().map(|topic| topic.name.clone()).collect();
     sanitize_download_settings(parsed, &valid_topics)
+}
+
+fn load_show_prompt_from_db(conn: &Connection, user_id: i64) -> Option<String> {
+    let table_exists: Option<String> = conn
+        .query_row(
+            "select name from sqlite_master where type='table' and name='user_settings'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .ok()
+        .flatten();
+    if table_exists.is_none() {
+        return None;
+    }
+    let column_exists: Option<i64> = conn
+        .query_row(
+            "select 1 from pragma_table_info('user_settings') where name = 'show_prompt' limit 1",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .ok()
+        .flatten();
+    if column_exists.is_none() {
+        return None;
+    }
+    conn.query_row(
+        "select show_prompt from user_settings where user_id = ? limit 1",
+        [user_id],
+        |row| row.get(0),
+    )
+        .optional()
+        .ok()
+        .flatten()
+}
+
+fn load_show_prompt_from_config(config: &ServeConfig) -> Option<String> {
+    let bytes = fs::read(&config.ui_settings_path).ok()?;
+    let parsed: UiSettings = serde_json::from_slice(&bytes).ok()?;
+    parsed.show_prompt
+}
+
+fn load_show_prompt_preference(
+    config: &ServeConfig,
+    conn: &Connection,
+    user_id: i64,
+) -> Option<String> {
+    load_show_prompt_from_db(conn, user_id).or_else(|| load_show_prompt_from_config(config))
 }
 
 fn persist_download_settings(
@@ -1493,6 +1556,12 @@ fn default_context(
     let download_settings = load_download_settings(config, &data.topics);
     let download_selected = download_settings.selected_topics.clone();
     let download_dir = config.pdf_dir.canonicalize().unwrap_or(config.pdf_dir.clone());
+    let show_prompt = match load_user_setting(conn, user_id, SETTINGS_KEY_SHOW_PROMPT) {
+        Ok(Some(value)) if value == "no" => "no".to_string(),
+        Ok(Some(value)) if value == "yes" => "yes".to_string(),
+        Ok(Some(value)) => value,
+        Ok(None) | Err(_) => "yes".to_string(),
+    };
     let settings_topics: Vec<Value> = data
         .topics
         .iter()
@@ -1520,12 +1589,15 @@ fn default_context(
         .collect();
     let settings_storage_papers = data.db.len();
     let settings_storage_papers_display = format!("{:,}", settings_storage_papers);
+    let show_prompt = load_show_prompt_preference(config, conn, user_id)
+        .unwrap_or_else(|| "yes".to_string());
     let mut ans = json!({
         "papers": top_papers,
         "numresults": papers.len(),
         "totpapers": data.db.len(),
         "tweets": [],
         "msg": "",
+        "show_prompt": show_prompt
         "topics": data.topics.iter().map(|topic| {
             json!({
                 "name": topic.name.clone(),
@@ -1542,11 +1614,13 @@ fn default_context(
         "publication_statuses": [],
         "sort_by": "",
         "sort_order": "desc",
+        "no_results_message": "",
         "settings_download_dir": download_dir.to_string_lossy().to_string(),
         "settings_storage_used": get_storage_usage(&download_dir),
         "settings_storage_papers": settings_storage_papers,
         "settings_storage_papers_display": settings_storage_papers_display,
         "settings_download_topics": settings_topics,
+        "show_prompt": show_prompt,
         "settings_date_range": {
             "start": data.settings_date_range.start,
             "end": data.settings_date_range.end,
