@@ -745,7 +745,13 @@
                     <div class="tag-list limited" id="topic-tags">
                         {% for topic in display_topics %}
                         {% set full_name = topic.display_name %}
-                        {% set truncated_name = truncate_topic_name(full_name, max_label_length) %}
+                        {% if full_name|length > max_label_length %}
+                        {% set truncated_candidate = full_name[:max_label_length] %}
+                        {% set trimmed = truncated_candidate.rsplit(' ', 1)[0] %}
+                        {% set truncated_name = (trimmed if trimmed else truncated_candidate).rstrip() ~ '...' %}
+                        {% else %}
+                        {% set truncated_name = full_name %}
+                        {% endif %}
                         <label class="tag">
                             <input
                                     type="checkbox"
