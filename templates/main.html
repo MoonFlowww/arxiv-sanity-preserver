@@ -745,7 +745,7 @@
                     <div class="tag-list limited" id="topic-tags">
                         {% for topic in display_topics %}
                         {% set full_name = topic.display_name %}
-                        {% set truncated_name = full_name|truncate_topic_name(max_label_length) %}
+                        {# {% set truncated_name = full_name|truncate_topic_name(max_label_length) %} #}
                         <label class="tag">
                             <input
                                     type="checkbox"
@@ -753,7 +753,7 @@
                                     value="{{ topic.name }}"
                                     {% if topic.name in selected_topics %}checked{% endif %}
                             />
-                            <span data-full-name="{{ full_name }}" title="{{ full_name }}">{{ truncated_name }} ({{ topic.count }})</span>
+                            <span data-full-name="{{ full_name }}" title="{{ full_name }}">{{ full_name }} ({{ topic.count }})</span>
                         </label>
                         {% endfor %}
                     </div>
