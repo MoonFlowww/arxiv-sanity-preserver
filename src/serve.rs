@@ -1556,12 +1556,7 @@ fn default_context(
     let download_settings = load_download_settings(config, &data.topics);
     let download_selected = download_settings.selected_topics.clone();
     let download_dir = config.pdf_dir.canonicalize().unwrap_or(config.pdf_dir.clone());
-    let show_prompt = match load_user_setting(conn, user_id, SETTINGS_KEY_SHOW_PROMPT) {
-        Ok(Some(value)) if value == "no" => "no".to_string(),
-        Ok(Some(value)) if value == "yes" => "yes".to_string(),
-        Ok(Some(value)) => value,
-        Ok(None) | Err(_) => "yes".to_string(),
-    };
+
     let settings_topics: Vec<Value> = data
         .topics
         .iter()
@@ -1588,7 +1583,7 @@ fn default_context(
         })
         .collect();
     let settings_storage_papers = data.db.len();
-    let settings_storage_papers_display = format!("{:,}", settings_storage_papers);
+    let settings_storage_papers_display = format_with_commas(settings_storage_papers);
     let show_prompt = load_show_prompt_preference(config, conn, user_id)
         .unwrap_or_else(|| "yes".to_string());
     let mut ans = json!({
@@ -1597,7 +1592,7 @@ fn default_context(
         "totpapers": data.db.len(),
         "tweets": [],
         "msg": "",
-        "show_prompt": show_prompt
+        "show_prompt": show_prompt,
         "topics": data.topics.iter().map(|topic| {
             json!({
                 "name": topic.name.clone(),
@@ -1620,7 +1615,6 @@ fn default_context(
         "settings_storage_papers": settings_storage_papers,
         "settings_storage_papers_display": settings_storage_papers_display,
         "settings_download_topics": settings_topics,
-        "show_prompt": show_prompt,
         "settings_date_range": {
             "start": data.settings_date_range.start,
             "end": data.settings_date_range.end,
