@@ -248,8 +248,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     run_with_args(args).await
 }
 
-fn build_template_env() -> Environment<'static> {
-    let mut env = Environment::new();
+fn register_template_helpers(env: &mut Environment<'static>) {
     env.add_filter("tojson", |value: MiniValue| {
         let json = serde_json::to_string(&value).unwrap_or_else(|_| "null".to_string());
         MiniValue::from_safe_string(json)
@@ -271,6 +270,11 @@ fn build_template_env() -> Environment<'static> {
             format!("/{}", endpoint)
         }
     });
+}
+
+fn build_template_env() -> Environment<'static> {
+    let mut env = Environment::new();
+    register_template_helpers(&mut env);
     env.set_loader(minijinja::path_loader("templates"));
     env
 }
