@@ -7,7 +7,7 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use clap::Parser;
 use chrono::{Datelike, NaiveDate};
-use minijinja::value::{Kwargs, Value as MiniValue};
+use minijinja::value::{Rest, Value as MiniValue, ValueKind};
 use minijinja::Environment;
 use regex::Regex;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -248,6 +248,26 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     run_with_args(args).await
 }
 
+fn filename_from_value(value: &MiniValue) -> Option<String> {
+    match value.kind() {
+        ValueKind::Map => {
+            let filename_key = MiniValue::from("filename");
+            let path_key = MiniValue::from("path");
+            value
+                .get_item(&filename_key)
+                .ok()
+                .and_then(|value| value.as_str().map(str::to_string))
+                .or_else(|| {
+                    value
+                        .get_item(&path_key)
+                        .ok()
+                        .and_then(|value| value.as_str().map(str::to_string))
+                })
+        }
+        _ => value.as_str().map(str::to_string),
+    }
+}
+
 fn register_template_helpers(env: &mut Environment<'static>) {
     env.add_filter("tojson", |value: MiniValue| {
         let json = serde_json::to_string(&value).unwrap_or_else(|_| "null".to_string());
@@ -259,13 +279,18 @@ fn register_template_helpers(env: &mut Environment<'static>) {
     env.add_function("truncate_topic_name", |value: String, max_len: usize| {
         truncate_topic_name(&value, max_len)
     });
-    env.add_function("url_for", |endpoint: String, kwargs: Kwargs| {
+    env.add_function("url_for", |endpoint: String, args: Rest<MiniValue>, kwargs: Kwargs| {
         if endpoint == "static" {
-            let filename = kwargs
-                .get("filename")
-                .or_else(|| kwargs.get("path"))
-                .and_then(|value| value.as_str())
-                .map(str::to_string);
+            let filename = args
+                .last()
+                .and_then(|value| {
+                    if matches!(value.kind(), ValueKind::Map) {
+                        filename_from_value(value)
+                    } else {
+                        None
+                    }
+                })
+                .or_else(|| args.first().and_then(filename_from_value));
             if let Some(name) = filename {
                 format!("/static/{}", name)
             } else {
