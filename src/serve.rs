@@ -259,8 +259,13 @@ fn register_template_helpers(env: &mut Environment<'static>) {
     env.add_function("truncate_topic_name", |value: String, max_len: usize| {
         truncate_topic_name(&value, max_len)
     });
-    env.add_function("url_for", |endpoint: String, filename: Option<String>| {
+    env.add_function("url_for", |endpoint: String, kwargs: HashMap<String, MiniValue>| {
         if endpoint == "static" {
+            let filename = kwargs
+                .get("filename")
+                .or_else(|| kwargs.get("path"))
+                .and_then(|value| value.as_str())
+                .map(str::to_string);
             if let Some(name) = filename {
                 format!("/static/{}", name)
             } else {
