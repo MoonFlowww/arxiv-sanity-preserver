@@ -7,7 +7,7 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use clap::Parser;
 use chrono::{Datelike, NaiveDate};
-use minijinja::value::Value as MiniValue;
+use minijinja::value::{Kwargs, Value as MiniValue};
 use minijinja::Environment;
 use regex::Regex;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -259,7 +259,7 @@ fn register_template_helpers(env: &mut Environment<'static>) {
     env.add_function("truncate_topic_name", |value: String, max_len: usize| {
         truncate_topic_name(&value, max_len)
     });
-    env.add_function("url_for", |endpoint: String, kwargs: HashMap<String, MiniValue>| {
+    env.add_function("url_for", |endpoint: String, kwargs: Kwargs| {
         if endpoint == "static" {
             let filename = kwargs
                 .get("filename")
