@@ -5,8 +5,8 @@ use axum::routing::{get, post};
 use axum::{Form, Json, Router};
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
-use clap::Parser;
 use chrono::{Datelike, NaiveDate};
+use clap::Parser;
 use minijinja::value::{Rest, Value as MiniValue, ValueKind};
 use minijinja::Environment;
 use regex::Regex;
@@ -26,9 +26,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tower_http::services::ServeDir;
 use url::form_urlencoded;
 
+use crate::hnsw_index::HnswIndex;
 use arxiv_sanity_pipeline::db::Database;
 use arxiv_sanity_pipeline::utils;
-use crate::hnsw_index::HnswIndex;
 
 const SINGLE_USER_ID: i64 = 1;
 const RECOMPUTE_STALE_SECONDS: i64 = 30 * 60;
@@ -56,11 +56,7 @@ pub struct ServeArgs {
         help = "number of results to return per query"
     )]
     pub num_results: usize,
-    #[arg(
-        long = "port",
-        default_value_t = 5000,
-        help = "port to serve on"
-    )]
+    #[arg(long = "port", default_value_t = 5000, help = "port to serve on")]
     pub port: u16,
 }
 
@@ -165,12 +161,10 @@ struct DownloadSettings {
     topics: HashMap<String, DownloadTopicSettings>,
 }
 
-
 #[derive(Debug, Clone, serde::Deserialize)]
 struct UiSettings {
     show_prompt: Option<String>,
 }
-
 
 impl Default for DownloadSettings {
     fn default() -> Self {
@@ -292,10 +286,11 @@ fn register_template_helpers(env: &mut Environment<'static>) {
     env.add_function("truncate_topic_name", |value: String, max_len: usize| {
         truncate_topic_name(&value, max_len)
     });
-    env.add_function("url_for", |endpoint: String, args: Rest<MiniValue>, kwargs: Kwargs| {
-        if endpoint == "static" {
-            let filename = if kwargs.args().next().is_some() {
-                kwargs
+    env.add_function(
+        "url_for",
+        |endpoint: String, args: Rest<MiniValue>, kwargs: Kwargs| {
+            if endpoint == "static" {
+                let filename = kwargs
                     .get::<Option<MiniValue>>("filename")
                     .ok()
                     .flatten()
@@ -307,47 +302,52 @@ fn register_template_helpers(env: &mut Environment<'static>) {
                             .flatten()
                             .and_then(|value| filename_from_value(&value))
                     })
+                    .or_else(|| {
+                        args.last()
+                            .and_then(|value| {
+                                if matches!(value.kind(), ValueKind::Map) {
+                                    filename_from_value(value)
+                                } else {
+                                    None
+                                }
+                            })
+                            .or_else(|| {
+                                args.first().and_then(|value| {
+                                    value
+                                        .as_str()
+                                        .and_then(|candidate| {
+                                            let trimmed = candidate.trim();
+                                            if trimmed.starts_with('{')
+                                                && (trimmed.contains("\"filename\"")
+                                                    || trimmed.contains("\"path\""))
+                                            {
+                                                serde_json::from_str::<Value>(trimmed)
+                                                    .ok()
+                                                    .and_then(|value| {
+                                                        value
+                                                            .get("filename")
+                                                            .or_else(|| value.get("path"))
+                                                            .and_then(|value| value.as_str())
+                                                            .map(str::to_string)
+                                                    })
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                        .or_else(|| args.first().and_then(filename_from_value))
+                                })
+                            })
+                    });
+                if let Some(name) = filename {
+                    format!("/static/{}", name)
+                } else {
+                    "/static".to_string()
+                }
             } else {
-                args.last().and_then(|value| {
-                    if matches!(value.kind(), ValueKind::Map) {
-                        filename_from_value(value)
-                    } else {
-                        None
-                    }
-                })
-                .or_else(|| {
-                    args.first().and_then(|value| {
-                        value.as_str().and_then(|candidate| {
-                            let trimmed = candidate.trim();
-                            if trimmed.starts_with('{')
-                                && (trimmed.contains("\"filename\"") || trimmed.contains("\"path\""))
-                            {
-                                serde_json::from_str::<Value>(trimmed)
-                                    .ok()
-                                    .and_then(|value| {
-                                        value
-                                            .get("filename")
-                                            .or_else(|| value.get("path"))
-                                            .and_then(|value| value.as_str())
-                                            .map(str::to_string)
-                                    })
-                            } else {
-                                None
-                            }
-                        })
-                            .or_else(|| args.first().and_then(filename_from_value))
-                    })
-                })
-            };
-            if let Some(name) = filename {
-                format!("/static/{}", name)
-            } else {
-                "/static".to_string()
+                format!("/{}", endpoint)
             }
-        } else {
-            format!("/{}", endpoint)
-        }
-    });
+        },
+    );
 }
 
 fn build_template_env() -> Environment<'static> {
@@ -389,10 +389,7 @@ pub async fn run_with_args(args: ServeArgs) -> Result<(), Box<dyn std::error::Er
         .route("/library", get(library))
         .route("/libtoggle", post(libtoggle))
         .route("/:request_pid", get(rank))
-        .nest_service(
-            "/static/thumbs",
-            ServeDir::new(config.thumbs_dir.clone()),
-        )
+        .nest_service("/static/thumbs", ServeDir::new(config.thumbs_dir.clone()))
         .nest_service("/static", ServeDir::new("static"))
         .with_state((state, Arc::new(env)));
 
@@ -422,7 +419,6 @@ fn truncate_topic_name(name: &str, max_len: usize) -> String {
     format!("{truncated}...")
 }
 
-
 fn ensure_database(config: &ServeConfig) -> Result<(), io::Error> {
     if !config.database_path.exists() {
         println!("did not find as.db, creating an empty database from embedded schema...");
@@ -435,10 +431,7 @@ fn ensure_database(config: &ServeConfig) -> Result<(), io::Error> {
 }
 
 fn refresh_serving_data(config: &ServeConfig) -> Result<ServeData, Box<dyn std::error::Error>> {
-    println!(
-        "loading the paper database from {:?}",
-        config.db_serve_path
-    );
+    println!("loading the paper database from {:?}", config.db_serve_path);
     let db_value = load_pickle_or_json_value(&config.db_serve_path, None)?;
     let mut db = value_to_map(db_value)?;
     ensure_impact_scores(&mut db);
@@ -458,9 +451,7 @@ fn refresh_serving_data(config: &ServeConfig) -> Result<ServeData, Box<dyn std::
 
     println!("loading serve cache... {:?}", config.serve_cache_path);
     let cache_value = load_pickle_or_json_value(&config.serve_cache_path, None)?;
-    let cache_map = cache_value
-        .as_object()
-        .ok_or("serve cache is not a map")?;
+    let cache_map = cache_value.as_object().ok_or("serve cache is not a map")?;
     let date_sorted_pids = cache_map
         .get("date_sorted_pids")
         .and_then(value_as_string_list)
@@ -577,9 +568,9 @@ fn load_show_prompt_from_db(conn: &Connection, user_id: i64) -> Option<String> {
         [user_id],
         |row| row.get(0),
     )
-        .optional()
-        .ok()
-        .flatten()
+    .optional()
+    .ok()
+    .flatten()
 }
 
 fn load_show_prompt_from_config(config: &ServeConfig) -> Option<String> {
@@ -609,13 +600,12 @@ fn persist_download_settings(
     Ok(())
 }
 
-
 fn load_hnsw_index(path: &Path) -> Result<HnswIndex, Box<dyn std::error::Error>> {
     if !path.exists() {
         return Err(format!("Missing HNSW index at {}", path.display()).into());
     }
-    let bytes = fs::read(path)
-        .map_err(|err| format!("Failed to read {}: {}", path.display(), err))?;
+    let bytes =
+        fs::read(path).map_err(|err| format!("Failed to read {}: {}", path.display(), err))?;
     let index: HnswIndex = bincode::deserialize(&bytes)
         .map_err(|err| format!("Failed to decode {}: {}", path.display(), err))?;
     println!("loaded HNSW index from {}", path.display());
@@ -629,20 +619,16 @@ fn refresh_hnsw_in_state(state: &AppState) -> Result<(), Box<dyn std::error::Err
     Ok(())
 }
 
-
 fn load_pickle_or_json_value(
     pickle_path: &Path,
     json_path: Option<&Path>,
 ) -> Result<Value, Box<dyn std::error::Error>> {
     if pickle_path.exists() {
         let pickle_result = (|| -> Result<Value, Box<dyn std::error::Error>> {
-            let bytes = fs::read(pickle_path).map_err(|err| {
-                format!("Failed to read {}: {}", pickle_path.display(), err)
-            })?;
-            let value: PickleValue =
-                serde_pickle::from_slice(&bytes, DeOptions::default()).map_err(|err| {
-                    format!("Failed to decode {}: {}", pickle_path.display(), err)
-                })?;
+            let bytes = fs::read(pickle_path)
+                .map_err(|err| format!("Failed to read {}: {}", pickle_path.display(), err))?;
+            let value: PickleValue = serde_pickle::from_slice(&bytes, DeOptions::default())
+                .map_err(|err| format!("Failed to decode {}: {}", pickle_path.display(), err))?;
             Ok(pickle_to_json(value))
         })();
         match pickle_result {
@@ -683,8 +669,8 @@ fn load_pickle_or_json_value(
             }
         }
     } else if let Some(path) = json_path {
-        let json_bytes = fs::read(path)
-            .map_err(|err| format!("Failed to read {}: {}", path.display(), err))?;
+        let json_bytes =
+            fs::read(path).map_err(|err| format!("Failed to read {}: {}", path.display(), err))?;
         let value = serde_json::from_slice(&json_bytes)
             .map_err(|err| format!("Failed to decode {}: {}", path.display(), err))?;
         println!("loaded data from JSON {:?}", path);
@@ -705,17 +691,15 @@ fn load_pickle_or_json_value_optional(
     if pickle_path.exists() {
         let bytes = fs::read(pickle_path)
             .map_err(|err| format!("Failed to read {}: {}", pickle_path.display(), err))?;
-        let value: PickleValue =
-            serde_pickle::from_slice(&bytes, DeOptions::default()).map_err(|err| {
-                format!("Failed to decode {}: {}", pickle_path.display(), err)
-            })?;
+        let value: PickleValue = serde_pickle::from_slice(&bytes, DeOptions::default())
+            .map_err(|err| format!("Failed to decode {}: {}", pickle_path.display(), err))?;
         Ok(Some(pickle_to_json(value)))
     } else if json_path.exists() {
         let json_bytes = fs::read(json_path)
             .map_err(|err| format!("Failed to read {}: {}", json_path.display(), err))?;
-        Ok(Some(serde_json::from_slice(&json_bytes).map_err(|err| {
-            format!("Failed to decode {}: {}", json_path.display(), err)
-        })?))
+        Ok(Some(serde_json::from_slice(&json_bytes).map_err(
+            |err| format!("Failed to decode {}: {}", json_path.display(), err),
+        )?))
     } else {
         Ok(None)
     }
@@ -735,12 +719,9 @@ fn pickle_to_json(value: PickleValue) -> Value {
         PickleValue::List(values) | PickleValue::Tuple(values) => {
             Value::Array(values.into_iter().map(pickle_to_json).collect())
         }
-        PickleValue::Set(values) | PickleValue::FrozenSet(values) => Value::Array(
-            values
-                .into_iter()
-                .map(hashable_to_json)
-                .collect(),
-        ),
+        PickleValue::Set(values) | PickleValue::FrozenSet(values) => {
+            Value::Array(values.into_iter().map(hashable_to_json).collect())
+        }
         PickleValue::Dict(entries) => {
             let mut map = Map::new();
             for (k, v) in entries {
@@ -766,12 +747,9 @@ fn hashable_to_json(value: PickleHashableValue) -> Value {
         PickleHashableValue::Tuple(values) => {
             Value::Array(values.into_iter().map(hashable_to_json).collect())
         }
-        PickleHashableValue::FrozenSet(values) => Value::Array(
-            values
-                .into_iter()
-                .map(hashable_to_json)
-                .collect(),
-        ),
+        PickleHashableValue::FrozenSet(values) => {
+            Value::Array(values.into_iter().map(hashable_to_json).collect())
+        }
     }
 }
 
@@ -796,9 +774,7 @@ fn pickle_key_to_string(value: PickleHashableValue) -> String {
 }
 
 fn value_to_map(value: Value) -> Result<HashMap<String, Value>, Box<dyn std::error::Error>> {
-    let obj = value
-        .as_object()
-        .ok_or("expected object in pickle")?;
+    let obj = value.as_object().ok_or("expected object in pickle")?;
     Ok(obj.clone().into_iter().collect())
 }
 
@@ -944,14 +920,15 @@ fn get_storage_usage(download_dir: &Path) -> String {
     if !download_dir.is_dir() {
         return "0 B".to_string();
     }
-    let output = Command::new("du")
-        .arg("-sh")
-        .arg(download_dir)
-        .output();
+    let output = Command::new("du").arg("-sh").arg(download_dir).output();
     match output {
         Ok(output) if output.status.success() => {
             let stdout = String::from_utf8_lossy(&output.stdout);
-            stdout.split_whitespace().next().unwrap_or("0 B").to_string()
+            stdout
+                .split_whitespace()
+                .next()
+                .unwrap_or("0 B")
+                .to_string()
         }
         _ => "Unknown".to_string(),
     }
@@ -1040,8 +1017,7 @@ fn compute_impact_score(paper: &mut Value, now_ts: i64, alpha: f64) {
         .get("time_published")
         .and_then(|v| v.as_i64())
         .unwrap_or(now_ts);
-    let years_since_pub =
-        ((now_ts - time_published) as f64) / (365.25 * 24.0 * 60.0 * 60.0);
+    let years_since_pub = ((now_ts - time_published) as f64) / (365.25 * 24.0 * 60.0 * 60.0);
     if let Some(obj) = paper.as_object_mut() {
         obj.insert("years_since_pub".to_string(), json!(years_since_pub));
         if let Some(citations) = obj
@@ -1079,7 +1055,11 @@ fn sort_by_impact(db: &HashMap<String, Value>) -> Vec<String> {
 }
 
 fn normalize_topics(topic_names: &[String]) -> Vec<String> {
-    topic_names.iter().filter(|t| !t.is_empty()).cloned().collect()
+    topic_names
+        .iter()
+        .filter(|t| !t.is_empty())
+        .cloned()
+        .collect()
 }
 
 fn has_repo_metadata(paper: &Value) -> bool {
@@ -1100,7 +1080,10 @@ fn has_repo_metadata(paper: &Value) -> bool {
     }
     if let Some(repo_links) = paper.get("repo_links") {
         if repo_links.is_array() {
-            return repo_links.as_array().map(|a| !a.is_empty()).unwrap_or(false);
+            return repo_links
+                .as_array()
+                .map(|a| !a.is_empty())
+                .unwrap_or(false);
         }
         return !repo_links.is_null();
     }
@@ -1109,7 +1092,11 @@ fn has_repo_metadata(paper: &Value) -> bool {
 
 fn publication_statuses(paper: &Value) -> Vec<String> {
     let mut statuses: HashSet<String> = HashSet::new();
-    let status_fields = ["publication_status", "published_status", "conference_status"];
+    let status_fields = [
+        "publication_status",
+        "published_status",
+        "conference_status",
+    ];
     for field in status_fields {
         if let Some(val) = paper.get(field) {
             if let Some(s) = val.as_str() {
@@ -1181,8 +1168,9 @@ fn publication_statuses(paper: &Value) -> Vec<String> {
     if !metadata_chunks.is_empty() {
         let metadata_text = metadata_chunks.join(" ");
         let metadata_lower = metadata_text.to_lowercase();
-        let venue_year_pattern = Regex::new(r"\b[A-Za-z][A-Za-z0-9&.+/\-]{2,}\s?(?:20\d{2}|19\d{2}|''?\d{2})\b")
-            .unwrap();
+        let venue_year_pattern =
+            Regex::new(r"\b[A-Za-z][A-Za-z0-9&.+/\-]{2,}\s?(?:20\d{2}|19\d{2}|''?\d{2})\b")
+                .unwrap();
         let has_venue_year = venue_year_pattern.is_match(&metadata_text);
         if has_venue_year {
             statuses.insert("accepted".to_string());
@@ -1246,18 +1234,18 @@ fn sort_papers(papers: Vec<Value>, sort_by: &str, sort_order: &str) -> Vec<Value
                 let score_b = b.get("impact_score").and_then(|v| v.as_f64());
                 let ordering = if reverse {
                     match (score_a, score_b) {
-                        (Some(a), Some(b)) => b
-                            .partial_cmp(&a)
-                            .unwrap_or(std::cmp::Ordering::Equal),
+                        (Some(a), Some(b)) => {
+                            b.partial_cmp(&a).unwrap_or(std::cmp::Ordering::Equal)
+                        }
                         (Some(_), None) => std::cmp::Ordering::Less,
                         (None, Some(_)) => std::cmp::Ordering::Greater,
                         (None, None) => std::cmp::Ordering::Equal,
                     }
                 } else {
                     match (score_a, score_b) {
-                        (Some(a), Some(b)) => a
-                            .partial_cmp(&b)
-                            .unwrap_or(std::cmp::Ordering::Equal),
+                        (Some(a), Some(b)) => {
+                            a.partial_cmp(&b).unwrap_or(std::cmp::Ordering::Equal)
+                        }
                         (Some(_), None) => std::cmp::Ordering::Less,
                         (None, Some(_)) => std::cmp::Ordering::Greater,
                         (None, None) => std::cmp::Ordering::Equal,
@@ -1286,12 +1274,22 @@ fn sort_papers(papers: Vec<Value>, sort_by: &str, sort_order: &str) -> Vec<Value
                 return ordering;
             }
             _ => {
-                let time_a = a.get("time_published").and_then(|v| v.as_i64()).unwrap_or(0);
-                let time_b = b.get("time_published").and_then(|v| v.as_i64()).unwrap_or(0);
+                let time_a = a
+                    .get("time_published")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
+                let time_b = b
+                    .get("time_published")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
                 time_b.cmp(&time_a)
             }
         };
-        if reverse { ordering } else { ordering.reverse() }
+        if reverse {
+            ordering
+        } else {
+            ordering.reverse()
+        }
     });
     out
 }
@@ -1321,7 +1319,13 @@ fn filter_papers(
     if let Some(score) = min_score {
         filtered = filtered
             .into_iter()
-            .filter(|paper| paper.get("impact_score").and_then(|v| v.as_f64()).unwrap_or(-1.0) >= score)
+            .filter(|paper| {
+                paper
+                    .get("impact_score")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(-1.0)
+                    >= score
+            })
             .collect();
     }
     if open_source {
@@ -1331,7 +1335,10 @@ fn filter_papers(
             .collect();
     }
     if !publication_filters.is_empty() {
-        let lowered: Vec<String> = publication_filters.iter().map(|s| s.to_lowercase()).collect();
+        let lowered: Vec<String> = publication_filters
+            .iter()
+            .map(|s| s.to_lowercase())
+            .collect();
         filtered = filtered
             .into_iter()
             .filter(|paper| matches_publication_filters(paper, &lowered))
@@ -1361,7 +1368,13 @@ fn papers_search(
             .iter()
             .filter_map(|pid| data.db.get(pid).cloned())
             .collect();
-        base = filter_papers(base, topic_names, min_score, open_source, publication_filters);
+        base = filter_papers(
+            base,
+            topic_names,
+            min_score,
+            open_source,
+            publication_filters,
+        );
         if let Some(sort_by) = sort_by {
             return sort_papers(base, sort_by, sort_order);
         }
@@ -1382,8 +1395,18 @@ fn papers_search(
         scores.push((score, paper.clone()));
     }
     scores.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-    let mut out: Vec<Value> = scores.into_iter().filter(|(s, _)| *s > 0.0).map(|(_, p)| p).collect();
-    out = filter_papers(out, topic_names, min_score, open_source, publication_filters);
+    let mut out: Vec<Value> = scores
+        .into_iter()
+        .filter(|(s, _)| *s > 0.0)
+        .map(|(_, p)| p)
+        .collect();
+    out = filter_papers(
+        out,
+        topic_names,
+        min_score,
+        open_source,
+        publication_filters,
+    );
     if let Some(sort_by) = sort_by {
         return sort_papers(out, sort_by, sort_order);
     }
@@ -1407,11 +1430,7 @@ fn papers_similar(data: &ServeData, pid: &str) -> Result<Vec<Value>, String> {
         .collect())
 }
 
-fn papers_from_library(
-    data: &ServeData,
-    conn: &Connection,
-    user_id: i64,
-) -> Vec<Value> {
+fn papers_from_library(data: &ServeData, conn: &Connection, user_id: i64) -> Vec<Value> {
     let mut out: Vec<Value> = Vec::new();
     let stmt = conn
         .prepare("select paper_id from library where user_id = ?")
@@ -1523,25 +1542,30 @@ fn encode_json(
         let version = paper.get("_version").and_then(|v| v.as_i64()).unwrap_or(0);
         let idvv = format!("{}v{}", rawid, version);
         let mut obj = Map::new();
-        obj.insert("title".to_string(), json!(paper.get("title").and_then(|v| v.as_str()).unwrap_or("")));
+        obj.insert(
+            "title".to_string(),
+            json!(paper.get("title").and_then(|v| v.as_str()).unwrap_or("")),
+        );
         obj.insert("pid".to_string(), json!(idvv));
         obj.insert("rawpid".to_string(), json!(rawid));
         obj.insert(
             "category".to_string(),
-            json!(
-                paper
-                    .get("arxiv_primary_category")
-                    .and_then(|v| v.get("term"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-            ),
+            json!(paper
+                .get("arxiv_primary_category")
+                .and_then(|v| v.get("term"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")),
         );
         let authors = paper
             .get("authors")
             .and_then(|v| v.as_array())
             .map(|arr| {
                 arr.iter()
-                    .filter_map(|a| a.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                    .filter_map(|a| {
+                        a.get("name")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())
+                    })
                     .collect::<Vec<String>>()
             })
             .unwrap_or_default();
@@ -1579,7 +1603,11 @@ fn encode_json(
             .and_then(|v| v.as_array())
             .map(|arr| {
                 arr.iter()
-                    .filter_map(|t| t.get("term").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                    .filter_map(|t| {
+                        t.get("term")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())
+                    })
                     .collect::<Vec<String>>()
             })
             .unwrap_or_default();
@@ -1596,7 +1624,10 @@ fn encode_json(
         obj.insert("repo_links".to_string(), json!(repo_links));
         obj.insert(
             "is_opensource".to_string(),
-            json!(paper.get("is_opensource").and_then(|v| v.as_bool()).unwrap_or(false)),
+            json!(paper
+                .get("is_opensource")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)),
         );
         if let Some(updated) = paper.get("updated").and_then(|v| v.as_str()) {
             if let Some(ts) = parse_datetime(updated) {
@@ -1634,10 +1665,19 @@ fn default_context(
     config: &ServeConfig,
     mut kws: HashMap<String, Value>,
 ) -> Value {
-    let top_papers = encode_json(papers, config.num_results, &config.thumbs_dir, conn, user_id);
+    let top_papers = encode_json(
+        papers,
+        config.num_results,
+        &config.thumbs_dir,
+        conn,
+        user_id,
+    );
     let download_settings = load_download_settings(config, &data.topics);
     let download_selected = download_settings.selected_topics.clone();
-    let download_dir = config.pdf_dir.canonicalize().unwrap_or(config.pdf_dir.clone());
+    let download_dir = config
+        .pdf_dir
+        .canonicalize()
+        .unwrap_or(config.pdf_dir.clone());
 
     let settings_topics: Vec<Value> = data
         .topics
@@ -1666,8 +1706,8 @@ fn default_context(
         .collect();
     let settings_storage_papers = data.db.len();
     let settings_storage_papers_display = format_with_commas(settings_storage_papers);
-    let show_prompt = load_show_prompt_preference(config, conn, user_id)
-        .unwrap_or_else(|| "yes".to_string());
+    let show_prompt =
+        load_show_prompt_preference(config, conn, user_id).unwrap_or_else(|| "yes".to_string());
     let mut ans = json!({
         "papers": top_papers,
         "numresults": papers.len(),
@@ -1887,7 +1927,11 @@ async fn search(
         min_score,
         open_source_filter,
         &publication_statuses,
-        if sort_by.is_empty() { None } else { Some(sort_by.as_str()) },
+        if sort_by.is_empty() {
+            None
+        } else {
+            Some(sort_by.as_str())
+        },
         &sort_order,
     );
     let mut no_results_message = "".to_string();
@@ -1990,8 +2034,13 @@ async fn recommend(
         .and_then(|vals| vals.first())
         .cloned()
         .unwrap_or_else(|| "all".to_string());
-    let legend: HashMap<&str, i64> =
-        HashMap::from([("day", 1), ("3days", 3), ("week", 7), ("month", 30), ("year", 365)]);
+    let legend: HashMap<&str, i64> = HashMap::from([
+        ("day", 1),
+        ("3days", 3),
+        ("week", 7),
+        ("month", 30),
+        ("year", 365),
+    ]);
     let tt = legend.get(ttstr.as_str()).copied();
 
     let data = state.data.read().unwrap().clone();
@@ -2002,7 +2051,10 @@ async fn recommend(
             let msg = "Recommended papers: (based on SVM trained on tfidf of papers in your library, refreshed every day or so)".to_string();
             (papers, msg)
         }
-        Err(_) => (vec![], "You must be logged in and have some papers saved in your library.".to_string()),
+        Err(_) => (
+            vec![],
+            "You must be logged in and have some papers saved in your library.".to_string(),
+        ),
     };
     let context = json!({
         "render_format": "recommend",
@@ -2167,7 +2219,7 @@ async fn health_check(
         "ok": true,
         "version": env!("CARGO_PKG_VERSION"),
     }))
-        .into_response()
+    .into_response()
 }
 
 fn normalize_date_input(value: Option<String>) -> Result<Option<String>, String> {
@@ -2190,11 +2242,8 @@ async fn update_download_settings(
     Json(payload): Json<DownloadSettingsPayload>,
 ) -> impl IntoResponse {
     let data = state.data.read().unwrap();
-    let valid_topics: HashSet<String> = data
-        .topics
-        .iter()
-        .map(|topic| topic.name.clone())
-        .collect();
+    let valid_topics: HashSet<String> =
+        data.topics.iter().map(|topic| topic.name.clone()).collect();
     for topic in &payload.selected_topics {
         if !valid_topics.contains(topic) {
             return (
@@ -2302,7 +2351,12 @@ async fn ingest_arxiv(
     headers: HeaderMap,
     Form(form): Form<HashMap<String, String>>,
 ) -> impl IntoResponse {
-    let paper_id = form.get("paper_id").cloned().unwrap_or_default().trim().to_string();
+    let paper_id = form
+        .get("paper_id")
+        .cloned()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
     let wants_json = headers
         .get("X-Requested-With")
         .and_then(|v| v.to_str().ok())
@@ -2494,9 +2548,7 @@ fn get_ingest_job(state: &AppState, job_id: &str) -> Option<IngestJob> {
 
 fn recompute_status_paths(config: &ServeConfig) -> (PathBuf, PathBuf, PathBuf) {
     (
-        config
-            .ingest_jobs_dir
-            .join("recompute_status.json"),
+        config.ingest_jobs_dir.join("recompute_status.json"),
         config.ingest_jobs_dir.join("recompute_stdout.log"),
         config.ingest_jobs_dir.join("recompute_stderr.log"),
     )
@@ -2565,17 +2617,15 @@ fn update_recompute_status(
 ) {
     let mut status_lock = state.recompute_status.lock().unwrap();
     let (_status_path, stdout_path, stderr_path) = recompute_status_paths(&state.config);
-    let mut status = status_lock
-        .clone()
-        .unwrap_or(RecomputeStatus {
-            status: "idle".to_string(),
-            updated_at: now_ts(),
-            percent: json!(0),
-            stdout_path: stdout_path.to_string_lossy().to_string(),
-            stderr_path: stderr_path.to_string_lossy().to_string(),
-            message: None,
-            error: None,
-        });
+    let mut status = status_lock.clone().unwrap_or(RecomputeStatus {
+        status: "idle".to_string(),
+        updated_at: now_ts(),
+        percent: json!(0),
+        stdout_path: stdout_path.to_string_lossy().to_string(),
+        stderr_path: stderr_path.to_string_lossy().to_string(),
+        message: None,
+        error: None,
+    });
     status.status = status_value.to_string();
     status.updated_at = now_ts();
     if ["idle", "skipped", "disabled"].contains(&status_value) {
@@ -2623,7 +2673,11 @@ fn run_recompute_job(state: &AppState) {
     if let Some(ref mut handle) = stderr_handle {
         let _ = writeln!(handle, "[{}] Starting recompute", now);
     }
-    let steps = [("analyze.py", true), ("buildsvm.py", false), ("make_cache.py", true)];
+    let steps = [
+        ("analyze.py", true),
+        ("buildsvm.py", false),
+        ("make_cache.py", true),
+    ];
     for (script_name, required) in steps {
         update_recompute_status(
             state,
@@ -2641,15 +2695,13 @@ fn run_recompute_job(state: &AppState) {
         let mut returncode = 0;
         if script_name == "make_cache.py" {
             let mut cmd = Command::new(python_executable());
-            cmd.arg(script_name)
-                .stdout(Stdio::piped())
-                .stderr(
-                    stderr_handle
-                        .as_ref()
-                        .and_then(|h| h.try_clone().ok())
-                        .map(Stdio::from)
-                        .unwrap_or(Stdio::null()),
-                );
+            cmd.arg(script_name).stdout(Stdio::piped()).stderr(
+                stderr_handle
+                    .as_ref()
+                    .and_then(|h| h.try_clone().ok())
+                    .map(Stdio::from)
+                    .unwrap_or(Stdio::null()),
+            );
             if let Ok(mut child) = cmd.spawn() {
                 if let Some(stdout) = child.stdout.take() {
                     let reader = BufReader::new(stdout);
@@ -2895,7 +2947,10 @@ static TOPIC_TRANSLATIONS: once_cell::sync::Lazy<HashMap<&'static str, &'static 
             ("astro-ph.CO", "Cosmology and Nongalactic Astrophysics"),
             ("astro-ph.GA", "Astrophysics of Galaxies"),
             ("astro-ph.HE", "High Energy Astrophysical Phenomena"),
-            ("astro-ph.IM", "Instrumentation and Methods for Astrophysics"),
+            (
+                "astro-ph.IM",
+                "Instrumentation and Methods for Astrophysics",
+            ),
             ("cond-mat.dis-nn", "Disordered Systems and Neural Networks"),
             ("cond-mat.mes-hall", "Mesoscale and Nanoscale Physics"),
             ("cond-mat.mtrl-sci", "Materials Science"),
@@ -2981,7 +3036,10 @@ static TOPIC_TRANSLATIONS: once_cell::sync::Lazy<HashMap<&'static str, &'static 
             ("physics.bio-ph", "Biological Physics"),
             ("physics.chem-ph", "Chemical Physics"),
             ("physics.comp-ph", "Computational Physics"),
-            ("physics.data-an", "Data Analysis, Statistics and Probability"),
+            (
+                "physics.data-an",
+                "Data Analysis, Statistics and Probability",
+            ),
             ("physics.ed-ph", "Physics Education"),
             ("physics.flu-dyn", "Fluid Dynamics"),
             ("physics.geo-ph", "Geophysics"),
