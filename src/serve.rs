@@ -281,14 +281,26 @@ fn register_template_helpers(env: &mut Environment<'static>) {
     });
     env.add_function("url_for", |endpoint: String, args: Rest<MiniValue>, kwargs: Kwargs| {
         if endpoint == "static" {
-            let filename = args
-                .last()
-                .and_then(|value| {
-                    if matches!(value.kind(), ValueKind::Map) {
-                        filename_from_value(value)
-                    } else {
-                        None
-                    }
+            let filename = kwargs
+                .get::<Option<MiniValue>>("filename")
+                .ok()
+                .flatten()
+                .and_then(|value| filename_from_value(&value))
+                .or_else(|| {
+                    kwargs
+                        .get::<Option<MiniValue>>("path")
+                        .ok()
+                        .flatten()
+                        .and_then(|value| filename_from_value(&value))
+                })
+                .or_else(|| {
+                    args.last().and_then(|value| {
+                        if matches!(value.kind(), ValueKind::Map) {
+                            filename_from_value(value)
+                        } else {
+                            None
+                        }
+                    })
                 })
                 .or_else(|| args.first().and_then(filename_from_value));
             if let Some(name) = filename {
