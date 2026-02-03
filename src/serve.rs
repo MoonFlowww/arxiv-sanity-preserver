@@ -249,6 +249,19 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn filename_from_value(value: &MiniValue) -> Option<String> {
+    let attr_filename = || {
+        value
+            .get_attr("filename")
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_string))
+            .or_else(|| {
+                value
+                    .get_attr("path")
+                    .ok()
+                    .and_then(|value| value.as_str().map(str::to_string))
+            })
+            .or_else(attr_filename)
+    };
     match value.kind() {
         ValueKind::Map => {
             let filename_key = MiniValue::from("filename");
@@ -264,7 +277,7 @@ fn filename_from_value(value: &MiniValue) -> Option<String> {
                         .and_then(|value| value.as_str().map(str::to_string))
                 })
         }
-        _ => value.as_str().map(str::to_string),
+        _ => attr_filename().or_else(|| value.as_str().map(str::to_string)),
     }
 }
 
@@ -281,28 +294,51 @@ fn register_template_helpers(env: &mut Environment<'static>) {
     });
     env.add_function("url_for", |endpoint: String, args: Rest<MiniValue>, kwargs: Kwargs| {
         if endpoint == "static" {
-            let filename = kwargs
-                .get::<Option<MiniValue>>("filename")
-                .ok()
-                .flatten()
-                .and_then(|value| filename_from_value(&value))
-                .or_else(|| {
-                    kwargs
-                        .get::<Option<MiniValue>>("path")
-                        .ok()
-                        .flatten()
-                        .and_then(|value| filename_from_value(&value))
+            let filename = if kwargs.args().next().is_some() {
+                kwargs
+                    .get::<Option<MiniValue>>("filename")
+                    .ok()
+                    .flatten()
+                    .and_then(|value| filename_from_value(&value))
+                    .or_else(|| {
+                        kwargs
+                            .get::<Option<MiniValue>>("path")
+                            .ok()
+                            .flatten()
+                            .and_then(|value| filename_from_value(&value))
+                    })
+            } else {
+                args.last().and_then(|value| {
+                    if matches!(value.kind(), ValueKind::Map) {
+                        filename_from_value(value)
+                    } else {
+                        None
+                    }
                 })
                 .or_else(|| {
-                    args.last().and_then(|value| {
-                        if matches!(value.kind(), ValueKind::Map) {
-                            filename_from_value(value)
-                        } else {
-                            None
-                        }
+                    args.first().and_then(|value| {
+                        value.as_str().and_then(|candidate| {
+                            let trimmed = candidate.trim();
+                            if trimmed.starts_with('{')
+                                && (trimmed.contains("\"filename\"") || trimmed.contains("\"path\""))
+                            {
+                                serde_json::from_str::<Value>(trimmed)
+                                    .ok()
+                                    .and_then(|value| {
+                                        value
+                                            .get("filename")
+                                            .or_else(|| value.get("path"))
+                                            .and_then(|value| value.as_str())
+                                            .map(str::to_string)
+                                    })
+                            } else {
+                                None
+                            }
+                        })
+                            .or_else(|| args.first().and_then(filename_from_value))
                     })
                 })
-                .or_else(|| args.first().and_then(filename_from_value));
+            };
             if let Some(name) = filename {
                 format!("/static/{}", name)
             } else {
