@@ -301,7 +301,7 @@ fn register_template_helpers(env: &mut Environment<'static>) {
                     })
             };
 
-            let mut filename = filename_from_kwargs("filename")
+            let filename = filename_from_kwargs("filename")
                 .or_else(|| filename_from_kwargs("path"))
                 .or_else(|| {
                     args.iter()
@@ -309,20 +309,17 @@ fn register_template_helpers(env: &mut Environment<'static>) {
                         .and_then(filename_from_value)
                 })
                 .or_else(|| {
-                    args.iter()
-                        .find_map(|value| value.as_str().map(str::to_string))
+                    args.iter().find_map(|value| {
+                        (value.kind() == ValueKind::String)
+                            .then(|| value.as_str().map(str::to_string))
+                            .flatten()
+                    })
                 });
 
-            if filename.is_none() {
-                return Err(Error::new(
-                    minijinja::ErrorKind::InvalidOperation,
-                    "url_for requires a filename or path argument",
-                ));
-            }
-
-            let filename = filename.take().unwrap();
             match endpoint.as_str() {
-                "static" => Ok(format!("/static/{filename}")),
+                "static" => Ok(filename
+                    .map(|filename| format!("/static/{filename}"))
+                    .unwrap_or_else(|| "/static".to_string())),
                 _ => Err(Error::new(
                     minijinja::ErrorKind::InvalidOperation,
                     format!("url_for does not support endpoint {endpoint}"),
