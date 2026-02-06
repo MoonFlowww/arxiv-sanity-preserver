@@ -288,64 +288,14 @@ fn register_template_helpers(env: &mut Environment<'static>) {
     });
     env.add_function(
         "url_for",
-        |endpoint: String, args: Rest<MiniValue>, kwargs: Kwargs| {
-            if endpoint == "static" {
-                let filename = kwargs
-                    .get::<Option<MiniValue>>("filename")
-                    .ok()
-                    .flatten()
-                    .and_then(|value| filename_from_value(&value))
-                    .or_else(|| {
-                        kwargs
-                            .get::<Option<MiniValue>>("path")
-                            .ok()
-                            .flatten()
-                            .and_then(|value| filename_from_value(&value))
-                    })
-                    .or_else(|| {
-                        args.last()
-                            .and_then(|value| {
-                                if matches!(value.kind(), ValueKind::Map) {
-                                    filename_from_value(value)
-                                } else {
-                                    None
-                                }
-                            })
-                            .or_else(|| {
-                                args.first().and_then(|value| {
-                                    value
-                                        .as_str()
-                                        .and_then(|candidate| {
-                                            let trimmed = candidate.trim();
-                                            if trimmed.starts_with('{')
-                                                && (trimmed.contains("\"filename\"")
-                                                    || trimmed.contains("\"path\""))
-                                            {
-                                                serde_json::from_str::<Value>(trimmed)
-                                                    .ok()
-                                                    .and_then(|value| {
-                                                        value
-                                                            .get("filename")
-                                                            .or_else(|| value.get("path"))
-                                                            .and_then(|value| value.as_str())
-                                                            .map(str::to_string)
-                                                    })
-                                            } else {
-                                                None
-                                            }
-                                        })
-                                        .or_else(|| args.first().and_then(filename_from_value))
-                                })
-                            })
-                    });
-                if let Some(name) = filename {
-                    format!("/static/{}", name)
-                } else {
-                    "/static".to_string()
-                }
-            } else {
-                format!("/{}", endpoint)
+        |endpoint: String, args: Rest<MiniValue>, kwargs: Kwargs| -> Result<String, Error> {
+            eprintln!("url_for endpoint={endpoint:?}");
+            eprintln!("kwargs has filename? {:?}", kwargs.get::<Option<MiniValue>>("filename").ok().flatten());
+            eprintln!("args.len={}", args.len());
+            for (i, v) in args.iter().enumerate() {
+                eprintln!("  arg[{i}] kind={:?} display={}", v.kind(), v);
             }
+            Ok("/__URL_FOR_DEBUG__".to_string())
         },
     );
 }
