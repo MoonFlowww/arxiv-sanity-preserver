@@ -1,8 +1,10 @@
 
 
 cargo build --release
+./target/release/arxiv_sanity_pipeline run-all
 
-
+---
+cargo build --release
 ./target/release/arxiv_sanity_pipeline fetch-papers --category-counts "cs.AI=20,cs.CL=12"
 ./target/release/arxiv_sanity_pipeline download-pdfs
 ./target/release/arxiv_sanity_pipeline parse-pdf-to-text
@@ -13,4 +15,5 @@ sqlite3 .pipeline/as.db < schema.sql
 ./target/release/arxiv_sanity_pipeline make-cache
 ./target/release/arxiv_sanity_pipeline serve --port 5000
 
+---
 ./target/release/arxiv_sanity_pipeline reset-pipeline --force

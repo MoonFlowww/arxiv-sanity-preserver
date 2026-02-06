@@ -37,7 +37,7 @@ mod serve;
 mod twitter;
 
 const DEFAULT_SEARCH_QUERY: &str = "cat:cs.CV+OR+cat:cs.AI+OR+cat:cs.LG+OR+cat:cs.CL+OR+cat:cs.NE+OR+cat:stat.ML+OR+cat:cs.IT+OR+cat:eess.SP+OR+cat:q-fin.TR+OR+cat:q-fin.RM+OR+cat:q-fin.ST+OR+cat:cond-mat.stat-mech";
-const DEFAULT_CATEGORY_COUNTS: &str = "cs.AI=2000,cs.LG=2000,stat.ML=2000,cs.IT=1500,eess.SP=1500,cs.NE=1000,cs.CL=1000,cs.CV=1500,cond-mat.stat-mech=500,q-fin.TR=2000,q-fin.RM=2000,q-fin.ST=2000";
+const DEFAULT_CATEGORY_COUNTS: &str = "cs.AI=20,cs.CL=12"; //"cs.AI=2000,cs.LG=2000,stat.ML=2000,cs.IT=1500,eess.SP=1500,cs.NE=1000,cs.CL=1000,cs.CV=1500,cond-mat.stat-mech=500,q-fin.TR=2000,q-fin.RM=2000,q-fin.ST=2000";
 const DEFAULT_MISSING_THUMB: &str = "static/missing.svg";
 const DEFAULT_OUTPUT_DIR: &str = ".pipeline";
 const DEFAULT_TFIDF_META_OUT: &str = ".pipeline/tfidf_meta.json";
