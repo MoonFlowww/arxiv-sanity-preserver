@@ -132,7 +132,9 @@ pub fn run_download_pdfs(_args: &DownloadArgs, config: &PipelineConfig) -> Resul
                 .categories
                 .iter()
                 .any(|category| published_topics.contains(category));
-            if matches_published_topic && !paper.is_published.unwrap_or(false) {
+            if matches_published_topic
+                && !(paper.is_accepted.unwrap_or(false) || paper.is_published.unwrap_or(false))
+            {
                 continue;
             }
         }
