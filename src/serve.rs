@@ -7,8 +7,8 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use chrono::{Datelike, NaiveDate};
 use clap::Parser;
-use minijinja::value::{Rest, Value as MiniValue, ValueKind};
-use minijinja::Environment;
+use minijinja::value::{Kwargs, Rest, Value as MiniValue, ValueKind};
+use minijinja::{Environment, Error};
 use regex::Regex;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Map, Value};
@@ -254,7 +254,6 @@ fn filename_from_value(value: &MiniValue) -> Option<String> {
                     .ok()
                     .and_then(|value| value.as_str().map(str::to_string))
             })
-            .or_else(attr_filename)
     };
     match value.kind() {
         ValueKind::Map => {
@@ -289,13 +288,46 @@ fn register_template_helpers(env: &mut Environment<'static>) {
     env.add_function(
         "url_for",
         |endpoint: String, args: Rest<MiniValue>, kwargs: Kwargs| -> Result<String, Error> {
-            eprintln!("url_for endpoint={endpoint:?}");
-            eprintln!("kwargs has filename? {:?}", kwargs.get::<Option<MiniValue>>("filename").ok().flatten());
-            eprintln!("args.len={}", args.len());
-            for (i, v) in args.iter().enumerate() {
-                eprintln!("  arg[{i}] kind={:?} display={}", v.kind(), v);
+            let filename_from_kwargs = |key| {
+                kwargs
+                    .get::<Option<MiniValue>>(key)
+                    .ok()
+                    .flatten()
+                    .and_then(|value| {
+                        value
+                            .as_str()
+                            .map(str::to_string)
+                            .or_else(|| filename_from_value(&value))
+                    })
+            };
+
+            let mut filename = filename_from_kwargs("filename")
+                .or_else(|| filename_from_kwargs("path"))
+                .or_else(|| {
+                    args.iter()
+                        .find(|value| value.kind() == ValueKind::Map)
+                        .and_then(filename_from_value)
+                })
+                .or_else(|| {
+                    args.iter()
+                        .find_map(|value| value.as_str().map(str::to_string))
+                });
+
+            if filename.is_none() {
+                return Err(Error::new(
+                    minijinja::ErrorKind::InvalidOperation,
+                    "url_for requires a filename or path argument",
+                ));
             }
-            Ok("/__URL_FOR_DEBUG__".to_string())
+
+            let filename = filename.take().unwrap();
+            match endpoint.as_str() {
+                "static" => Ok(format!("/static/{filename}")),
+                _ => Err(Error::new(
+                    minijinja::ErrorKind::InvalidOperation,
+                    format!("url_for does not support endpoint {endpoint}"),
+                )),
+            }
         },
     );
 }
