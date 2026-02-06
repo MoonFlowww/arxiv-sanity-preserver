@@ -1,5 +1,6 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
 use once_cell::sync::Lazy;
+use regex::Regex;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -25,6 +26,10 @@ const SECONDS_PER_YEAR: f64 = 365.25 * 24.0 * 60.0 * 60.0;
 static PUNCTUATION: Lazy<HashSet<char>> = Lazy::new(|| {
     let chars = "'!\"#$%&'()*+,./:;<=>?@[\\]^_`{|}~";
     chars.chars().collect()
+});
+static REPO_LINK_PATTERN: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(https?://(?:www\.)?(?:github\.com|gitlab\.com|bitbucket\.org|codeberg\.org|gitee\.com|git\.sr\.ht|dev\.azure\.com|[A-Za-z0-9-]+\.visualstudio\.com)/[^\s\])},;]+)")
+        .expect("Failed to compile repo link regex")
 });
 
 #[derive(Debug, Deserialize)]
@@ -392,16 +397,7 @@ fn convert_json_paper(raw_id: &str, value: &Value) -> Result<PaperRecord, String
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
-    let repo_links = value
-        .get("repo_links")
-        .and_then(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(|item| item.as_str().map(|val| val.to_string()))
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
+    let repo_links = extract_repo_links_from_comment(&arxiv_comment);
     let is_opensource = value
         .get("is_opensource")
         .and_then(Value::as_bool)
@@ -430,6 +426,25 @@ fn convert_json_paper(raw_id: &str, value: &Value) -> Result<PaperRecord, String
         is_published,
         ..PaperRecord::default()
     })
+}
+
+fn extract_repo_links_from_comment(comment: &str) -> Vec<String> {
+    if comment.trim().is_empty() {
+        return Vec::new();
+    }
+    let mut links = Vec::new();
+    for captures in REPO_LINK_PATTERN.captures_iter(comment) {
+        if let Some(link_match) = captures.get(1) {
+            let link = link_match
+                .as_str()
+                .trim_end_matches(|c: char| matches!(c, '.' | ',' | ';' | ')' | ']'))
+                .to_string();
+            if !links.contains(&link) {
+                links.push(link);
+            }
+        }
+    }
+    links
 }
 
 fn normalize_paper(pid: &str, paper: &mut PaperRecord) {

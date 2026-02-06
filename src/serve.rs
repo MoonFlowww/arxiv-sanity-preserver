@@ -1042,21 +1042,6 @@ fn normalize_topics(topic_names: &[String]) -> Vec<String> {
 }
 
 fn has_repo_metadata(paper: &Value) -> bool {
-    if paper
-        .get("is_opensource")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
-        || paper
-            .get("has_github")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false)
-        || paper
-            .get("is_open_source")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false)
-    {
-        return true;
-    }
     if let Some(repo_links) = paper.get("repo_links") {
         if repo_links.is_array() {
             return repo_links
@@ -1071,121 +1056,16 @@ fn has_repo_metadata(paper: &Value) -> bool {
 
 fn publication_statuses(paper: &Value) -> Vec<String> {
     let mut statuses: HashSet<String> = HashSet::new();
-    let status_fields = [
-        "publication_status",
-        "published_status",
-        "conference_status",
-    ];
-    for field in status_fields {
-        if let Some(val) = paper.get(field) {
-            if let Some(s) = val.as_str() {
-                statuses.insert(s.to_lowercase());
-            } else if let Some(arr) = val.as_array() {
-                for v in arr {
-                    if let Some(s) = v.as_str() {
-                        statuses.insert(s.to_lowercase());
-                    }
-                }
-            }
-        }
-    }
     if paper
-        .get("accepted")
+        .get("is_accepted")
         .and_then(|v| v.as_bool())
         .unwrap_or(false)
         || paper
-            .get("is_accepted")
+            .get("is_published")
             .and_then(|v| v.as_bool())
             .unwrap_or(false)
     {
-        statuses.insert("accepted".to_string());
-    }
-    if paper
-        .get("is_published")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
-    {
-        statuses.insert("published".to_string());
-    }
-    if paper
-        .get("presented")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
-        || paper
-            .get("is_presented")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false)
-    {
-        statuses.insert("presented".to_string());
-    }
-
-    let metadata_fields = [
-        "comment",
-        "comments",
-        "journal_ref",
-        "journal-ref",
-        "journalref",
-        "journal",
-        "annotation",
-        "annotations",
-        "notes",
-    ];
-    let mut metadata_chunks: Vec<String> = Vec::new();
-    for field in metadata_fields {
-        if let Some(val) = paper.get(field) {
-            if let Some(s) = val.as_str() {
-                metadata_chunks.push(s.to_string());
-            } else if let Some(arr) = val.as_array() {
-                for v in arr {
-                    if let Some(s) = v.as_str() {
-                        metadata_chunks.push(s.to_string());
-                    }
-                }
-            }
-        }
-    }
-    if !metadata_chunks.is_empty() {
-        let metadata_text = metadata_chunks.join(" ");
-        let metadata_lower = metadata_text.to_lowercase();
-        let venue_year_pattern =
-            Regex::new(r"\b[A-Za-z][A-Za-z0-9&.+/\-]{2,}\s?(?:20\d{2}|19\d{2}|''?\d{2})\b")
-                .unwrap();
-        let has_venue_year = venue_year_pattern.is_match(&metadata_text);
-        if has_venue_year {
-            statuses.insert("accepted".to_string());
-        }
-        let acceptance_patterns = [
-            r"\baccepted\b",
-            r"\bto appear\b",
-            r"\bin press\b",
-            r"\bcamera[- ]ready\b",
-            r"\bappears in\b",
-            r"\bin proceedings\b",
-            r"\bpublished in\b",
-        ];
-        let presentation_patterns = [
-            r"\boral\b",
-            r"\bspotlight\b",
-            r"\bposter\b",
-            r"\bpresented at\b",
-            r"\bpresentation at\b",
-            r"\bwill be presented\b",
-            r"\bpresenting at\b",
-            r"\baccepted as an? (oral|poster|spotlight)\b",
-        ];
-        if acceptance_patterns
-            .iter()
-            .any(|pattern| Regex::new(pattern).unwrap().is_match(&metadata_lower))
-        {
-            statuses.insert("accepted".to_string());
-        }
-        if presentation_patterns
-            .iter()
-            .any(|pattern| Regex::new(pattern).unwrap().is_match(&metadata_lower))
-        {
-            statuses.insert("presented".to_string());
-            statuses.insert("accepted".to_string());
-        }
+        statuses.insert("accepted_published".to_string());
     }
     statuses.into_iter().collect()
 }
@@ -1195,9 +1075,6 @@ fn matches_publication_filters(paper: &Value, filters: &[String]) -> bool {
         return true;
     }
     let paper_statuses = publication_statuses(paper);
-    if paper_statuses.is_empty() {
-        return false;
-    }
     paper_statuses
         .iter()
         .any(|status| filters.contains(&status.to_lowercase()))
