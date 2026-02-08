@@ -942,6 +942,83 @@ fn get_storage_usage(download_dir: &Path) -> String {
     }
 }
 
+fn format_bytes(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+    if bytes < 1024 {
+        return format!("{} B", bytes);
+    }
+    let mut size = bytes as f64;
+    let mut unit_index = 0;
+    while size >= 1024.0 && unit_index < UNITS.len() - 1 {
+        size /= 1024.0;
+        unit_index += 1;
+    }
+    format!("{:.1} {}", size, UNITS[unit_index])
+}
+
+fn get_dir_usage(path: &Path) -> (String, Option<u64>) {
+    if !path.is_dir() {
+        return ("0 B".to_string(), Some(0));
+    }
+    let display = Command::new("du").arg("-sh").arg(path).output();
+    let display = match display {
+        Ok(output) if output.status.success() => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            stdout
+                .split_whitespace()
+                .next()
+                .unwrap_or("0 B")
+                .to_string()
+        }
+        _ => "Unknown".to_string(),
+    };
+    let bytes = Command::new("du").arg("-sb").arg(path).output();
+    let bytes = match bytes {
+        Ok(output) if output.status.success() => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            stdout
+                .split_whitespace()
+                .next()
+                .and_then(|value| value.parse::<u64>().ok())
+        }
+        _ => None,
+    };
+    (display, bytes)
+}
+
+fn get_file_usage(path: &Path) -> (String, Option<u64>) {
+    match fs::metadata(path) {
+        Ok(metadata) => {
+            let bytes = metadata.len();
+            (format_bytes(bytes), Some(bytes))
+        }
+        Err(err) if err.kind() == io::ErrorKind::NotFound => ("0 B".to_string(), Some(0)),
+        Err(_) => ("Unknown".to_string(), None),
+    }
+}
+
+fn get_storage_components(config: &ServeConfig) -> HashMap<&'static str, String> {
+    let (thumbs_display, thumbs_bytes) = get_dir_usage(&config.thumbs_dir);
+    let (txt_display, txt_bytes) = get_dir_usage(&config.txt_dir);
+    let (pdf_display, pdf_bytes) = get_dir_usage(&config.pdf_dir);
+    let (hnsw_display, hnsw_bytes) = get_file_usage(&config.hnsw_index_path);
+
+    let total_display = match (thumbs_bytes, txt_bytes, pdf_bytes, hnsw_bytes) {
+        (Some(thumbs), Some(txt), Some(pdf), Some(hnsw)) => {
+            format_bytes(thumbs + txt + pdf + hnsw)
+        }
+        _ => "Unknown".to_string(),
+    };
+
+    let mut sizes = HashMap::new();
+    sizes.insert("thumbs", thumbs_display);
+    sizes.insert("txt", txt_display);
+    sizes.insert("pdfs", pdf_display);
+    sizes.insert("hnsw", hnsw_display);
+    sizes.insert("total", total_display);
+    sizes
+}
+
 fn build_topics(
     paper_db: &HashMap<String, Value>,
     date_sorted_pids: &[String],
@@ -1563,6 +1640,7 @@ fn default_context(
         .pdf_dir
         .canonicalize()
         .unwrap_or(config.pdf_dir.clone());
+    let storage_components = get_storage_components(config);
 
     let settings_topics: Vec<Value> = data
         .topics
@@ -1620,6 +1698,26 @@ fn default_context(
         "no_results_message": "",
         "settings_download_dir": download_dir.to_string_lossy().to_string(),
         "settings_storage_used": get_storage_usage(&download_dir),
+        "settings_storage_thumbs": storage_components
+            .get("thumbs")
+            .cloned()
+            .unwrap_or_else(|| "Unknown".to_string()),
+        "settings_storage_text": storage_components
+            .get("txt")
+            .cloned()
+            .unwrap_or_else(|| "Unknown".to_string()),
+        "settings_storage_pdfs": storage_components
+            .get("pdfs")
+            .cloned()
+            .unwrap_or_else(|| "Unknown".to_string()),
+        "settings_storage_hnsw": storage_components
+            .get("hnsw")
+            .cloned()
+            .unwrap_or_else(|| "Unknown".to_string()),
+        "settings_storage_total": storage_components
+            .get("total")
+            .cloned()
+            .unwrap_or_else(|| "Unknown".to_string()),
         "settings_storage_papers": settings_storage_papers,
         "settings_storage_papers_display": settings_storage_papers_display,
         "settings_download_topics": settings_topics,
