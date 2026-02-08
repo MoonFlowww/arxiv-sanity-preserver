@@ -62,6 +62,7 @@ fn fetch_paper_metadata(paper_id: &str) -> Result<Paper, String> {
         authors,
         abstract_text,
         updated,
+        time_published: None,
         categories,
         citation_count: openalex_metadata.citation_count,
         is_accepted: openalex_metadata.is_accepted,

@@ -157,7 +157,7 @@ struct DownloadTopicSettings {
     start: Option<String>,
     end: Option<String>,
     published: bool,
-    limit: Option<u32>,
+    limit: Option<usize>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -185,7 +185,7 @@ struct DownloadTopicInput {
     start: Option<String>,
     end: Option<String>,
     published: Option<bool>,
-    limit: Option<u32>,
+    limit: Option<usize>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -467,7 +467,7 @@ fn refresh_serving_data(config: &ServeConfig) -> Result<ServeData, Box<dyn std::
 }
 
 fn parse_date_string(value: &str) -> Option<NaiveDate> {
-    NaiveDate::parse_from_str(value, "%Y-%m-%d").ok()
+    NaiveDate::parse_from_str(value, "%d/%m/%Y").ok()
 }
 
 fn clean_date_value(value: Option<String>) -> Option<String> {
@@ -1783,7 +1783,7 @@ fn ensure_single_user(conn: &Connection, username: &str) -> Result<(), rusqlite:
 fn format_date(ts: i64) -> String {
     let dt = chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0)
         .unwrap_or_else(|| chrono::DateTime::<chrono::Utc>::from_timestamp(0, 0).unwrap());
-    dt.format("%Y-%m-%d").to_string()
+    dt.format("%d/%m/%Y").to_string()
 }
 
 fn format_date_mdy(ts: i64) -> String {

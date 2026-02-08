@@ -361,6 +361,9 @@ struct Paper {
     #[serde(rename = "abstract")]
     abstract_text: String,
     updated: String,
+    #[serde(default)]
+    time_published: Option<i64>,
+
     categories: Vec<String>,
     #[serde(default)]
     citation_count: Option<i64>,
@@ -1290,6 +1293,7 @@ fn fetch_for_query(
                 authors,
                 abstract_text,
                 updated,
+                time_published: None,
                 categories,
                 citation_count: openalex_metadata.citation_count,
                 is_accepted: openalex_metadata.is_accepted,

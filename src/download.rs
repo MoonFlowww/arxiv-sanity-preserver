@@ -1,3 +1,4 @@
+use chrono::NaiveDate;
 use rand::Rng;
 use reqwest::blocking::Client;
 use reqwest::header::CONTENT_TYPE;
@@ -5,6 +6,7 @@ use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::cmp::Reverse;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -14,29 +16,43 @@ use crate::{load_db_jsonl, utils, DownloadArgs, Paper, PipelineConfig};
 struct DownloadTopicSettings {
     #[serde(default)]
     published: bool,
+    #[serde(default)]
+    start: Option<String>,
+    #[serde(default)]
+    end: Option<String>,
+    #[serde(default)]
+    limit: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
 struct DownloadSettings {
     #[serde(default)]
+    selected_topics: Vec<String>,
+    #[serde(default)]
     topics: HashMap<String, DownloadTopicSettings>,
 }
 
-fn load_published_topic_filter(config: &PipelineConfig) -> HashSet<String> {
+fn load_download_settings(config: &PipelineConfig) -> DownloadSettings {
     let settings_path = Path::new(&config.output_dir).join("download_settings.json");
     let bytes = match fs::read(&settings_path) {
         Ok(bytes) => bytes,
-        Err(_) => return HashSet::new(),
+        Err(_) => {
+            return DownloadSettings {
+                selected_topics: Vec::new(),
+                topics: HashMap::new(),
+            }
+        }
     };
     let settings: DownloadSettings = match serde_json::from_slice(&bytes) {
         Ok(settings) => settings,
-        Err(_) => return HashSet::new(),
+        Err(_) => {
+            return DownloadSettings {
+                selected_topics: Vec::new(),
+                topics: HashMap::new(),
+            }
+        }
     };
     settings
-        .topics
-        .into_iter()
-        .filter_map(|(topic, settings)| settings.published.then_some(topic))
-        .collect()
 }
 
 fn build_pdf_filename(paper: &Paper) -> String {
@@ -60,6 +76,15 @@ fn is_html_response(content_type: Option<&str>, body: &[u8]) -> bool {
             .take(6)
             .map(|byte| byte.to_ascii_lowercase())
             .eq(b"<html>".iter().copied())
+}
+
+fn parse_date_string(value: &str) -> Option<NaiveDate> {
+    NaiveDate::parse_from_str(value, "%d/%m/%Y").ok()
+}
+
+fn date_from_timestamp(ts: Option<i64>) -> Option<NaiveDate> {
+    ts.and_then(|value| chrono::DateTime::<chrono::Utc>::from_timestamp(value, 0))
+        .map(|dt| dt.date_naive())
 }
 
 pub fn download_pdf_for_paper(
@@ -105,7 +130,67 @@ pub fn download_pdf_for_paper(
 pub fn run_download_pdfs(_args: &DownloadArgs, config: &PipelineConfig) -> Result<(), String> {
     let db = load_db_jsonl(Path::new(&config.db_path))?;
     let pdf_dir = Path::new(&config.pdf_dir);
-    let published_topics = load_published_topic_filter(config);
+    let download_settings = load_download_settings(config);
+    let active_topics: Vec<String> = if !download_settings.selected_topics.is_empty() {
+        download_settings.selected_topics.clone()
+    } else {
+        download_settings.topics.keys().cloned().collect()
+    };
+    let mut allowed_ids: Option<HashSet<String>> = None;
+    if !active_topics.is_empty() {
+        let mut ids = HashSet::new();
+        for topic in &active_topics {
+            let settings = download_settings.topics.get(topic);
+            let start_date = settings
+                .and_then(|value| value.start.as_deref())
+                .and_then(parse_date_string);
+            let end_date = settings
+                .and_then(|value| value.end.as_deref())
+                .and_then(parse_date_string);
+            let published_only = settings.map(|value| value.published).unwrap_or(false);
+            let limit = settings.and_then(|value| value.limit);
+
+            let mut candidates: Vec<&Paper> = db
+                .values()
+                .filter(|paper| paper.categories.iter().any(|cat| cat == topic))
+                .filter(|paper| {
+                    if published_only {
+                        paper.is_accepted.unwrap_or(false) || paper.is_published.unwrap_or(false)
+                    } else {
+                        true
+                    }
+                })
+                .filter(|paper| {
+                    if start_date.is_none() && end_date.is_none() {
+                        return true;
+                    }
+                    let paper_date = date_from_timestamp(paper.time_published);
+                    let Some(paper_date) = paper_date else {
+                        return false;
+                    };
+                    if let Some(start) = start_date {
+                        if paper_date < start {
+                            return false;
+                        }
+                    }
+                    if let Some(end) = end_date {
+                        if paper_date > end {
+                            return false;
+                        }
+                    }
+                    true
+                })
+                .collect();
+            candidates.sort_by_key(|paper| Reverse(paper.time_published.unwrap_or(0)));
+            if let Some(limit) = limit {
+                candidates.truncate(limit);
+            }
+            for paper in candidates {
+                ids.insert(paper.id.clone());
+            }
+        }
+        allowed_ids = Some(ids);
+    }
     if !pdf_dir.exists() {
         fs::create_dir_all(pdf_dir)
             .map_err(|err| format!("Failed to create pdf dir {pdf_dir:?}: {err}"))?;
@@ -127,14 +212,8 @@ pub fn run_download_pdfs(_args: &DownloadArgs, config: &PipelineConfig) -> Resul
     let mut rng = rand::thread_rng();
 
     for paper in db.values() {
-        if !published_topics.is_empty() {
-            let matches_published_topic = paper
-                .categories
-                .iter()
-                .any(|category| published_topics.contains(category));
-            if matches_published_topic
-                && !(paper.is_accepted.unwrap_or(false) || paper.is_published.unwrap_or(false))
-            {
+        if let Some(ref allowed_ids) = allowed_ids {
+            if !allowed_ids.contains(&paper.id) {
                 continue;
             }
         }

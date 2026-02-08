@@ -125,7 +125,9 @@
             if (todayButton && endDateValue && !todayButton.dataset.bound) {
                 todayButton.addEventListener('click', function () {
                     var today = new Date();
-                    var formatted = today.toISOString().slice(0, 10);
+                    var day = String(today.getDate()).padStart(2, '0');
+                    var month = String(today.getMonth() + 1).padStart(2, '0');
+                    var formatted = day + '/' + month + '/' + today.getFullYear();
                     endDateValue.textContent = formatted;
                 });
                 todayButton.dataset.bound = 'true';
@@ -263,11 +265,43 @@
                 statusMessage.classList.toggle('is-error', Boolean(isError));
                 statusMessage.classList.toggle('is-success', Boolean(message) && !isError);
             };
+            var normalizeDateInput = function (value) {
+                if (!value) {
+                    return { value: null, date: null, error: null };
+                }
+                var trimmed = value.trim();
+                if (!trimmed) {
+                    return { value: null, date: null, error: null };
+                }
+                var match = trimmed.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+                if (!match) {
+                    return { value: null, date: null, error: 'Use DD/MM/YYYY' };
+                }
+                var day = parseInt(match[1], 10);
+                var month = parseInt(match[2], 10);
+                var year = parseInt(match[3], 10);
+                var date = new Date(year, month - 1, day);
+                if (
+                    date.getFullYear() !== year ||
+                    date.getMonth() !== month - 1 ||
+                    date.getDate() !== day
+                ) {
+                    return { value: null, date: null, error: 'Invalid date: ' + trimmed };
+                }
+                var normalized =
+                    String(day).padStart(2, '0') +
+                    '/' +
+                    String(month).padStart(2, '0') +
+                    '/' +
+                    String(year);
+                return { value: normalized, date: date, error: null };
+            };
             var buildDownloadSettingsPayload = function () {
                 var payload = {
                     selected_topics: [],
                     topics: {}
                 };
+                var errors = [];
                 topicInputs.forEach(function (input) {
                     if (input.checked) {
                         payload.selected_topics.push(input.value);
@@ -275,10 +309,30 @@
                 });
                 rows.forEach(function (row) {
                     var topicValue = row.getAttribute('data-topic');
+                    var topicLabel = row.querySelector('span') ? row.querySelector('span').textContent : topicValue;
                     var startInput = row.querySelector('input[name="download_start_' + topicValue + '"]');
                     var endInput = row.querySelector('input[name="download_end_' + topicValue + '"]');
                     var publishedInput = row.querySelector('input[name="download_published_' + topicValue + '"]');
                     var limitInput = row.querySelector('input[name="download_limit_' + topicValue + '"]');
+                    var startResult = normalizeDateInput(startInput ? startInput.value : '');
+                    var endResult = normalizeDateInput(endInput ? endInput.value : '');
+                    if (startResult.error) {
+                        errors.push(topicLabel + ': ' + startResult.error);
+                    }
+                    if (endResult.error) {
+                        errors.push(topicLabel + ': ' + endResult.error);
+                    }
+                    if (startResult.value && endResult.value && startResult.date && endResult.date) {
+                        if (startResult.date > endResult.date) {
+                            errors.push(topicLabel + ': start date cannot be after end date');
+                        }
+                    }
+                    if (startInput && startResult.value) {
+                        startInput.value = startResult.value;
+                    }
+                    if (endInput && endResult.value) {
+                        endInput.value = endResult.value;
+                    }
                     var limitValue = null;
                     if (limitInput && limitInput.value) {
                         var parsedLimit = parseInt(limitInput.value, 10);
@@ -287,13 +341,13 @@
                         }
                     }
                     payload.topics[topicValue] = {
-                        start: startInput ? startInput.value : null,
-                        end: endInput ? endInput.value : null,
+                        start: startResult.value,
+                        end: endResult.value,
                         published: publishedInput ? publishedInput.checked : false,
                         limit: limitValue
                     };
                 });
-                return payload;
+                return { payload: payload, errors: errors };
             };
             if (saveButton && !saveButton.dataset.bound) {
                 saveButton.addEventListener('click', function () {
@@ -303,14 +357,19 @@
                     saveButton.classList.remove('saved');
                     setStatusMessage('Saving selections...', false);
 
-                    var payload = buildDownloadSettingsPayload();
+                    var payloadResult = buildDownloadSettingsPayload();
+                    if (payloadResult.errors.length) {
+                        saveButton.textContent = original;
+                        setStatusMessage(payloadResult.errors[0], true);
+                        return;
+                    }
 
                     fetch('/settings/download', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify(payload)
+                        body: JSON.stringify(payloadResult.payload)
                     }).then(function (response) {
                         if (!response.ok) {
                             return response.json().then(function (data) {
@@ -343,14 +402,20 @@
                     runButton.disabled = true;
                     setStatusMessage('Starting download...', false);
 
-                    var payload = buildDownloadSettingsPayload();
+                    var payloadResult = buildDownloadSettingsPayload();
+                    if (payloadResult.errors.length) {
+                        runButton.textContent = original;
+                        runButton.disabled = false;
+                        setStatusMessage(payloadResult.errors[0], true);
+                        return;
+                    }
 
                     fetch('/settings/download/run', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify(payload)
+                        body: JSON.stringify(payloadResult.payload)
                     }).then(function (response) {
                         if (!response.ok) {
                             return response.json().then(function (data) {
@@ -1084,9 +1149,9 @@
                                 <span>{{ topic_stat.paper_count_display if topic_stat else '—' }}</span>
                                 <span>{{ settings_date_range.start }}</span>
                                 <span>{{ settings_date_range.end }}</span>
-                                <input class="settings-input" type="date" name="download_start_{{ topic.name }}" value="{{ download_values.start if download_values and download_values.start else '' }}">
-                                <input class="settings-input" type="date" name="download_end_{{ topic.name }}" value="{{ download_values.end if download_values and download_values.end else '' }}">
-                                <input class="settings-input" type="number" min="1" step="1" name="download_limit_{{ topic.name }}" value="{{ download_values.limit if download_values and download_values.limit is not none else '' }}">
+                                <input class="settings-input" type="text" name="download_start_{{ topic.name }}" placeholder="DD/MM/YYYY" value="{{ download_values.start if download_values and download_values.start else '' }}">
+                                <input class="settings-input" type="text" name="download_end_{{ topic.name }}" placeholder="DD/MM/YYYY" value="{{ download_values.end if download_values and download_values.end else '' }}">
+                                <input class="settings-input" type="number" min="1" step="1" name="download_limit_{{ topic.name }}" placeholder="e.g. 50" value="{{ download_values.limit if download_values and download_values.limit is not none else '' }}">
                                 <label class="settings-checkbox-inline">
                                     <input type="checkbox" name="download_published_{{ topic.name }}" {% if download_values and download_values.published %}checked{% endif %}>
                                     <span>Published</span>

@@ -170,6 +170,7 @@ pub fn run_migrate_db(args: &MigrateDbArgs) -> Result<(), String> {
             authors,
             abstract_text,
             updated,
+            time_published: None,
             categories,
             citation_count: None,
             is_accepted: None,
