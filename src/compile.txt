@@ -17,3 +17,8 @@ sqlite3 .pipeline/as.db < schema.sql
 
 ---
 ./target/release/arxiv_sanity_pipeline reset-pipeline --force
+
+
+---
+cargo build --release
+./target/release/arxiv_sanity_pipeline serve --port 5000
