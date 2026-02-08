@@ -136,6 +136,10 @@ struct TopicStat {
     display_name: String,
     paper_count: usize,
     paper_count_display: String,
+    days_span: i64,
+    days_span_display: String,
+    papers_per_day: f64,
+    papers_per_day_display: String,
     citations_total: i64,
     citations_total_display: String,
     avg_score: Option<f64>,
@@ -153,6 +157,7 @@ struct DownloadTopicSettings {
     start: Option<String>,
     end: Option<String>,
     published: bool,
+    limit: Option<u32>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -180,6 +185,7 @@ struct DownloadTopicInput {
     start: Option<String>,
     end: Option<String>,
     published: Option<bool>,
+    limit: Option<u32>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -360,6 +366,7 @@ pub async fn run_with_args(args: ServeArgs) -> Result<(), Box<dyn std::error::Er
         .route("/recompute/status", get(recompute_status_endpoint))
         .route("/ingest", post(ingest_arxiv))
         .route("/settings/download", post(update_download_settings))
+        .route("/settings/download/run", post(run_download_with_settings))
         .route("/search", get(search))
         .route("/topics", get(topics))
         .route("/recommend", get(recommend))
@@ -490,6 +497,7 @@ fn sanitize_download_settings(
         }
         value.start = clean_date_value(value.start.take());
         value.end = clean_date_value(value.end.take());
+        value.limit = value.limit.filter(|limit| *limit > 0);
         if let (Some(start), Some(end)) = (&value.start, &value.end) {
             if let (Some(start_date), Some(end_date)) =
                 (parse_date_string(start), parse_date_string(end))
@@ -862,6 +870,8 @@ fn build_topic_stats(
     for (topic, pids) in topic_pids {
         let mut citation_sum: i64 = 0;
         let mut scores: Vec<f64> = Vec::new();
+        let mut min_published: Option<i64> = None;
+        let mut max_published: Option<i64> = None;
         for pid in pids {
             if let Some(paper) = paper_db.get(pid) {
                 if let Some(count) = paper.get("citation_count").and_then(|v| v.as_i64()) {
@@ -870,6 +880,16 @@ fn build_topic_stats(
                 if let Some(score) = paper.get("impact_score").and_then(|v| v.as_f64()) {
                     scores.push(score);
                 }
+                if let Some(ts) = paper.get("time_published").and_then(|v| v.as_i64()) {
+                    min_published = Some(match min_published {
+                        Some(current) => current.min(ts),
+                        None => ts,
+                    });
+                    max_published = Some(match max_published {
+                        Some(current) => current.max(ts),
+                        None => ts,
+                    });
+                }
             }
         }
         let avg_score = if scores.is_empty() {
@@ -877,10 +897,19 @@ fn build_topic_stats(
         } else {
             Some(scores.iter().sum::<f64>() / scores.len() as f64)
         };
+        let days_span = match (min_published, max_published) {
+            (Some(min_ts), Some(max_ts)) => max_ts.saturating_sub(min_ts) / 86_400,
+            _ => 0,
+        };
+        let papers_per_day = pids.len() as f64 / (std::cmp::max(days_span, 1) as f64);
         stats.push(TopicStat {
             display_name: translate_topic_name(topic).to_string(),
             paper_count: pids.len(),
             paper_count_display: format_with_commas(pids.len()),
+            days_span,
+            days_span_display: format_with_commas(days_span),
+            papers_per_day,
+            papers_per_day_display: format!("{:.2}", papers_per_day),
             citations_total: citation_sum,
             citations_total_display: format_with_commas(citation_sum),
             avg_score,
@@ -1547,6 +1576,7 @@ fn default_context(
                         "start": settings.start,
                         "end": settings.end,
                         "published": settings.published,
+                        "limit": settings.limit,
                     })
                 })
                 .unwrap_or(Value::Null);
@@ -1602,6 +1632,10 @@ fn default_context(
                 "display_name": stat.display_name.clone(),
                 "paper_count": stat.paper_count,
                 "paper_count_display": stat.paper_count_display.clone(),
+                "days_span": stat.days_span,
+                "days_span_display": stat.days_span_display.clone(),
+                "papers_per_day": stat.papers_per_day,
+                "papers_per_day_display": stat.papers_per_day_display.clone(),
                 "citations_total": stat.citations_total,
                 "citations_total_display": stat.citations_total_display.clone(),
                 "avg_score": stat.avg_score,
@@ -2093,20 +2127,13 @@ fn normalize_date_input(value: Option<String>) -> Result<Option<String>, String>
     }
 }
 
-async fn update_download_settings(
-    State((state, _env)): State<(AppState, Arc<Environment<'static>>)>,
-    Json(payload): Json<DownloadSettingsPayload>,
-) -> impl IntoResponse {
-    let data = state.data.read().unwrap();
-    let valid_topics: HashSet<String> =
-        data.topics.iter().map(|topic| topic.name.clone()).collect();
+fn build_download_settings_from_payload(
+    payload: DownloadSettingsPayload,
+    valid_topics: &HashSet<String>,
+) -> Result<DownloadSettings, String> {
     for topic in &payload.selected_topics {
         if !valid_topics.contains(topic) {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({ "error": format!("Unknown topic: {}", topic) })),
-            )
-                .into_response();
+            return Err(format!("Unknown topic: {}", topic));
         }
     }
     let mut settings = DownloadSettings::default();
@@ -2114,47 +2141,49 @@ async fn update_download_settings(
 
     for (topic, input) in payload.topics {
         if !valid_topics.contains(&topic) {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({ "error": format!("Unknown topic: {}", topic) })),
-            )
-                .into_response();
+            return Err(format!("Unknown topic: {}", topic));
         }
-        let start = match normalize_date_input(input.start) {
-            Ok(value) => value,
-            Err(err) => {
-                return (StatusCode::BAD_REQUEST, Json(json!({ "error": err }))).into_response();
-            }
-        };
-        let end = match normalize_date_input(input.end) {
-            Ok(value) => value,
-            Err(err) => {
-                return (StatusCode::BAD_REQUEST, Json(json!({ "error": err }))).into_response();
-            }
-        };
+        let start = normalize_date_input(input.start)?;
+        let end = normalize_date_input(input.end)?;
         if let (Some(start_date), Some(end_date)) = (
             start.as_deref().and_then(parse_date_string),
             end.as_deref().and_then(parse_date_string),
         ) {
             if start_date > end_date {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({
-                        "error": format!("Start date cannot be after end date for {}", topic)
-                    })),
-                )
-                    .into_response();
+                return Err(format!(
+                    "Start date cannot be after end date for {}",
+                    topic
+                ));
             }
         }
+        let limit = input.limit.filter(|value| *value > 0);
         settings.topics.insert(
             topic,
             DownloadTopicSettings {
                 start,
                 end,
                 published: input.published.unwrap_or(false),
+                limit,
             },
         );
     }
+    Ok(settings)
+}
+
+async fn update_download_settings(
+    State((state, _env)): State<(AppState, Arc<Environment<'static>>)>,
+    Json(payload): Json<DownloadSettingsPayload>,
+) -> impl IntoResponse {
+    let data = state.data.read().unwrap();
+    let valid_topics: HashSet<String> =
+        data.topics.iter().map(|topic| topic.name.clone()).collect();
+    let settings = match build_download_settings_from_payload(payload, &valid_topics) {
+        Ok(settings) => settings,
+        Err(err) => {
+            return (StatusCode::BAD_REQUEST, Json(json!({ "error": err }))).into_response();
+        }
+    };
+
 
     if let Err(err) = persist_download_settings(&state.config, &settings) {
         return (
@@ -2167,6 +2196,48 @@ async fn update_download_settings(
     Json(json!({ "ok": true })).into_response()
 }
 
+async fn run_download_with_settings(
+    State((state, _env)): State<(AppState, Arc<Environment<'static>>)>,
+    payload: Option<Json<DownloadSettingsPayload>>,
+) -> impl IntoResponse {
+    let data = state.data.read().unwrap();
+    let valid_topics: HashSet<String> =
+        data.topics.iter().map(|topic| topic.name.clone()).collect();
+    if let Some(Json(payload)) = payload {
+        if !payload.selected_topics.is_empty() || !payload.topics.is_empty() {
+            let settings = match build_download_settings_from_payload(payload, &valid_topics) {
+                Ok(settings) => settings,
+                Err(err) => {
+                    return (StatusCode::BAD_REQUEST, Json(json!({ "error": err })))
+                        .into_response();
+                }
+            };
+            if let Err(err) = persist_download_settings(&state.config, &settings) {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": err })),
+                )
+                    .into_response();
+            }
+        }
+    }
+
+    let download_settings = load_download_settings(&state.config, &data.topics);
+    if let Err(err) = spawn_download_job() {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": err })),
+        )
+            .into_response();
+    }
+    let topic_count = download_settings.selected_topics.len();
+    let message = if topic_count > 0 {
+        format!("Download started for {} topics.", topic_count)
+    } else {
+        "Download started.".to_string()
+    };
+    Json(json!({ "ok": true, "message": message })).into_response()
+}
 async fn ingest_status(
     State((state, _env)): State<(AppState, Arc<Environment<'static>>)>,
     AxumPath(job_id): AxumPath<String>,
@@ -2791,6 +2862,28 @@ fn run_ingest_job(state: &AppState, job_id: &str, paper_id: &str) {
     *handle = Some(thread::spawn(move || {
         run_recompute_job(&state_clone);
     }));
+}
+
+fn spawn_download_job() -> Result<(), String> {
+    let config_path = PathBuf::from("pipeline_config.json");
+    if !config_path.exists() {
+        return Err("Missing pipeline_config.json for download job.".to_string());
+    }
+    let executable = std::env::current_exe()
+        .map_err(|err| format!("Failed to resolve current executable: {err}"))?;
+    thread::spawn(move || {
+        let status = Command::new(executable)
+            .arg("--config")
+            .arg(config_path)
+            .arg("download-pdfs")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+        if let Err(err) = status {
+            eprintln!("Failed to start download job: {}", err);
+        }
+    });
+    Ok(())
 }
 
 fn python_executable() -> String {
