@@ -11,6 +11,24 @@ pub fn strip_version(idstr: &str) -> String {
     idstr.split('v').next().unwrap_or(idstr).to_string()
 }
 
+pub fn normalize_arxiv_id(pid: &str) -> String {
+    let trimmed = pid.trim();
+    if trimmed.len() >= 6 && trimmed[..6].eq_ignore_ascii_case("arxiv:") {
+        trimmed[6..].trim().to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+pub fn parse_arxiv_id_list(input: &str) -> Vec<String> {
+    input
+        .split(';')
+        .map(normalize_arxiv_id)
+        .filter(|id| !id.is_empty())
+        .collect()
+}
+
+
 pub fn is_valid_id(pid: &str) -> bool {
     ARXIV_ID_RE.is_match(pid)
 }

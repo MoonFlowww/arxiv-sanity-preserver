@@ -268,7 +268,7 @@ struct DownloadArgs {}
 
 #[derive(Args, Debug, Clone)]
 struct IngestSinglePaperArgs {
-    #[arg(value_name = "paper_id", help = "arXiv identifier, e.g., 1512.08756v2")]
+    #[arg(value_name = "paper_id", help = "arXiv identifier(s), supports arXiv: prefix and semicolon-separated list, e.g., arXiv:1512.08756; 1112.1120")]
     paper_id: Option<String>,
     #[arg(
         long = "no-recompute",

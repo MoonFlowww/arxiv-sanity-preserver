@@ -1319,6 +1319,9 @@ fn papers_search(
 ) -> Vec<Value> {
     let qparts: Vec<String> = qraw
         .to_lowercase()
+        .chars()
+        .map(|ch| if ch.is_ascii_punctuation() { ' ' } else { ch })
+        .collect::<String>()
         .split_whitespace()
         .map(|s| s.to_string())
         .collect();
@@ -2371,12 +2374,13 @@ async fn ingest_arxiv(
     headers: HeaderMap,
     Form(form): Form<HashMap<String, String>>,
 ) -> impl IntoResponse {
-    let paper_id = form
+    let paper_id_raw = form
         .get("paper_id")
         .cloned()
         .unwrap_or_default()
         .trim()
         .to_string();
+    let paper_ids = utils::parse_arxiv_id_list(&paper_id_raw);
     let wants_json = headers
         .get("X-Requested-With")
         .and_then(|v| v.to_str().ok())
@@ -2388,32 +2392,36 @@ async fn ingest_arxiv(
             .map(|v| v.contains("application/json"))
             .unwrap_or(false);
 
-    if paper_id.is_empty() {
+    if paper_ids.is_empty() {
         if wants_json {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(json!({ "error": "Please enter an arXiv identifier to add." })),
+                Json(json!({ "error": "Please enter at least one arXiv identifier to add." })),
             )
                 .into_response();
         }
         return Redirect::temporary("/").into_response();
     }
-    if !utils::is_valid_id(&paper_id) {
+    if paper_ids
+        .iter()
+        .any(|paper_id| !utils::is_valid_id(paper_id))
+    {
         if wants_json {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(json!({ "error": "Please provide a valid arXiv identifier, e.g., 1512.08756v2." })),
+                Json(json!({ "error": "Please provide valid arXiv identifier(s), e.g., 1512.08756v2 or arXiv:1512.08756." })),
             )
                 .into_response();
         }
         return Redirect::temporary("/").into_response();
     }
 
-    let job_id = init_ingest_job(&state, &paper_id);
+    let normalized_input = paper_ids.join("; ");
+    let job_id = init_ingest_job(&state, &normalized_input);
     let job_id_clone = job_id.clone();
     let state_clone = state.clone();
     thread::spawn(move || {
-        run_ingest_job(&state_clone, &job_id_clone, &paper_id);
+        run_ingest_job(&state_clone, &job_id_clone, &normalized_input);
     });
 
     if wants_json {
