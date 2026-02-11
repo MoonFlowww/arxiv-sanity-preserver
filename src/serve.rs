@@ -40,7 +40,7 @@ fn pipeline_path(entry: &str) -> PathBuf {
 }
 
 #[derive(Parser, Debug, Clone)]
-#[command(name = "serve.py")]
+#[command(name = "serve")]
 pub struct ServeArgs {
     #[arg(
         short = 'p',
@@ -1004,9 +1004,7 @@ fn get_storage_components(config: &ServeConfig) -> HashMap<&'static str, String>
     let (hnsw_display, hnsw_bytes) = get_file_usage(&config.hnsw_index_path);
 
     let total_display = match (thumbs_bytes, txt_bytes, pdf_bytes, hnsw_bytes) {
-        (Some(thumbs), Some(txt), Some(pdf), Some(hnsw)) => {
-            format_bytes(thumbs + txt + pdf + hnsw)
-        }
+        (Some(thumbs), Some(txt), Some(pdf), Some(hnsw)) => format_bytes(thumbs + txt + pdf + hnsw),
         _ => "Unknown".to_string(),
     };
 
@@ -2248,10 +2246,7 @@ fn build_download_settings_from_payload(
             end.as_deref().and_then(parse_date_string),
         ) {
             if start_date > end_date {
-                return Err(format!(
-                    "Start date cannot be after end date for {}",
-                    topic
-                ));
+                return Err(format!("Start date cannot be after end date for {}", topic));
             }
         }
         let limit = input.limit.filter(|value| *value > 0);
@@ -2698,35 +2693,51 @@ fn run_recompute_job(state: &AppState) {
     if let Some(ref mut handle) = stderr_handle {
         let _ = writeln!(handle, "[{}] Starting recompute", now);
     }
-    let steps = [
-        ("analyze.py", true),
-        ("buildsvm.py", false),
-        ("make_cache.py", true),
-    ];
-    for (script_name, required) in steps {
+    let config_path = PathBuf::from("pipeline_config.json");
+    let executable = match std::env::current_exe() {
+        Ok(path) => path,
+        Err(err) => {
+            update_recompute_status(
+                state,
+                "failed",
+                Some("Recompute failed".to_string()),
+                Some(format!("Failed to resolve current executable: {err}")),
+                None,
+            );
+            let mut handle = state.recompute_thread.lock().unwrap();
+            *handle = None;
+            return;
+        }
+    };
+    let steps = [("analyze", true), ("buildsvm", false), ("make-cache", true)];
+    for (subcommand, required) in steps {
         update_recompute_status(
             state,
             "running",
-            Some(format!("Running {}", script_name)),
+            Some(format!("Running {}", subcommand)),
             None,
             Some(json!("—")),
         );
         if let Some(ref mut handle) = stdout_handle {
-            let _ = writeln!(handle, "[{}] Running {}", now, script_name);
+            let _ = writeln!(handle, "[{}] Running {}", now, subcommand);
         }
         if let Some(ref mut handle) = stderr_handle {
-            let _ = writeln!(handle, "[{}] Running {}", now, script_name);
+            let _ = writeln!(handle, "[{}] Running {}", now, subcommand);
         }
         let mut returncode = 0;
-        if script_name == "make_cache.py" {
-            let mut cmd = Command::new(python_executable());
-            cmd.arg(script_name).stdout(Stdio::piped()).stderr(
-                stderr_handle
-                    .as_ref()
-                    .and_then(|h| h.try_clone().ok())
-                    .map(Stdio::from)
-                    .unwrap_or(Stdio::null()),
-            );
+        if subcommand == "make-cache" {
+            let mut cmd = Command::new(&executable);
+            cmd.arg("--config")
+                .arg(&config_path)
+                .arg(subcommand)
+                .stdout(Stdio::piped())
+                .stderr(
+                    stderr_handle
+                        .as_ref()
+                        .and_then(|h| h.try_clone().ok())
+                        .map(Stdio::from)
+                        .unwrap_or(Stdio::null()),
+                );
             if let Ok(mut child) = cmd.spawn() {
                 if let Some(stdout) = child.stdout.take() {
                     let reader = BufReader::new(stdout);
@@ -2741,7 +2752,7 @@ fn run_recompute_job(state: &AppState) {
                                     update_recompute_status(
                                         state,
                                         "running",
-                                        Some(format!("Running {}", script_name)),
+                                        Some(format!("Running {}", subcommand)),
                                         None,
                                         Some(json!(percent)),
                                     );
@@ -2757,8 +2768,10 @@ fn run_recompute_job(state: &AppState) {
                 returncode = 1;
             }
         } else {
-            let status = Command::new(python_executable())
-                .arg(script_name)
+            let status = Command::new(&executable)
+                .arg("--config")
+                .arg(&config_path)
+                .arg(subcommand)
                 .stdout(
                     stdout_handle
                         .as_ref()
@@ -2781,7 +2794,7 @@ fn run_recompute_job(state: &AppState) {
                 state,
                 "failed",
                 Some("Recompute failed".to_string()),
-                Some(format!("{} failed", script_name)),
+                Some(format!("{} failed", subcommand)),
                 None,
             );
             let mut handle = state.recompute_thread.lock().unwrap();
@@ -2791,7 +2804,7 @@ fn run_recompute_job(state: &AppState) {
         update_recompute_status(
             state,
             "running",
-            Some(format!("Finished {}", script_name)),
+            Some(format!("Finished {}", subcommand)),
             None,
             Some(json!("—")),
         );
@@ -2828,8 +2841,27 @@ fn run_ingest_job(state: &AppState, job_id: &str, paper_id: &str) {
         false,
         false,
     );
-    let mut cmd = Command::new(python_executable());
-    cmd.arg("ingest_single_paper.py")
+    let config_path = PathBuf::from("pipeline_config.json");
+    let executable = match std::env::current_exe() {
+        Ok(path) => path,
+        Err(err) => {
+            update_ingest_job(
+                state,
+                job_id,
+                "Ingest failed",
+                100,
+                Some(format!("Failed to resolve current executable: {err}")),
+                true,
+                true,
+                false,
+            );
+            return;
+        }
+    };
+    let mut cmd = Command::new(executable);
+    cmd.arg("--config")
+        .arg(config_path)
+        .arg("ingest-single-paper")
         .arg("--no-recompute")
         .arg(paper_id)
         .stdout(Stdio::piped())
@@ -2982,10 +3014,6 @@ fn spawn_download_job() -> Result<(), String> {
         }
     });
     Ok(())
-}
-
-fn python_executable() -> String {
-    std::env::var("PYTHON").unwrap_or_else(|_| "python".to_string())
 }
 
 static TOPIC_TRANSLATIONS: once_cell::sync::Lazy<HashMap<&'static str, &'static str>> =
