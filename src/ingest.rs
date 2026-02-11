@@ -15,7 +15,7 @@ use crate::hnsw_index::HnswIndex;
 fn fetch_paper_metadata(paper_id: &str) -> Result<Paper, String> {
     let base_url = "http://export.arxiv.org/api/query?id_list=";
     let client = Client::builder()
-        .user_agent("arxiv-sanity-preserver (contact: you@example.com)")
+        .user_agent("arxiv-sanity-preserver")
         .build()
         .map_err(|err| format!("Failed to build HTTP client: {err}"))?;
     let response = client
@@ -252,7 +252,6 @@ pub fn run_ingest_single_paper(
     } else {
         println!("Updating TF-IDF vector for single-paper ingest...");
         update_incremental_tfidf(config, &txt_path, &paper)?;
-        println!("Skipping full cache recompute as requested.");
     }
 
     Ok(())
