@@ -1,0 +1,191 @@
+<div class="settings-overlay" id="settings-overlay" aria-hidden="true">
+    <div class="settings-modal" role="dialog" aria-labelledby="settings-title" aria-describedby="settings-description">
+        <div class="settings-header">
+            <h3 id="settings-title">Settings</h3>
+            <button type="button" class="settings-close" aria-label="Close settings">✕</button>
+        </div>
+        <p class="settings-description" id="settings-description">
+            Tune your experience. Changes are saved automatically on this device.
+        </p>
+        <div class="settings-tabs" role="tablist" aria-label="Settings tabs">
+            <button type="button" class="settings-tab" role="tab" data-tab="settings-general">General</button>
+            <button type="button" class="settings-tab" role="tab" data-tab="settings-download">Download</button>
+            <button type="button" class="settings-tab" role="tab" data-tab="settings-storage">Storage</button>
+            <button type="button" class="settings-tab" role="tab" data-tab="settings-stats">Stats</button>
+        </div>
+        <div class="settings-panels">
+            <section class="settings-panel" id="settings-general" role="tabpanel" aria-hidden="true">
+                <h4>General</h4>
+                <div class="settings-card">
+                    <p>Choose the defaults that appear when you open the site.</p>
+                    <div class="settings-row">
+                        <span>Default layout</span>
+                        <span class="settings-value" id="settings-layout-value">Two-column</span>
+                    </div>
+                    <div class="settings-row">
+                        <span>Theme</span>
+                        <span class="settings-value" id="settings-theme-value">System</span>
+                    </div>
+                    <div class="settings-row">
+                        <span>Server status</span>
+                        <span class="settings-value">
+                            <span id="settings-health-value">Checking...</span>
+                            <span class="settings-subvalue" id="settings-health-details"></span>
+                        </span>
+                    </div>
+                </div>
+            </section>
+            <section class="settings-panel" id="settings-download" role="tabpanel" aria-hidden="true">
+                <h4>Download</h4>
+                <div class="settings-card">
+                    <p>Manage arXiv exports and download defaults.</p>
+                    <div class="settings-row">
+                        <span>Auto-download PDFs</span>
+                        <span class="settings-value">Manual (on ingest)</span>
+                    </div>
+                    <div class="settings-row">
+                        <span>Save location</span>
+                        <span class="settings-value">{{ settings_download_dir }}</span>
+                    </div>
+                    <div class="settings-row settings-row-stack">
+                        <span>arXiv databases</span>
+                        <div class="settings-topic-picker">
+                            <div class="settings-topic-section">
+                                <div class="settings-topic-section-title">Available topics</div>
+                                <div class="topic-cluster">
+                                    <input
+                                            type="search"
+                                            id="settings-topic-search"
+                                            class="topic-search"
+                                            placeholder="Search topics..."
+                                            autocomplete="off"
+                                    />
+                                    <div class="tag-list limited settings-topic-list" id="settings-topic-tags">
+                                        {% for topic in settings_download_topics %}
+                                        <label class="tag settings-topic-tag">
+                                            <input type="checkbox" name="download_topics[]" value="{{ topic.name }}" {% if topic.selected %}checked{% endif %}>
+                                            <span data-full-name="{{ topic.display_name }}">{{ topic.display_name }}</span>
+                                        </label>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="settings-topic-section">
+                                <div class="settings-topic-section-title">Selected topics</div>
+                                <div class="topic-cluster">
+                                    <div class="tag-list limited settings-selected-list" id="settings-selected-topics" aria-live="polite"></div>
+                                </div>
+                            </div>
+                            <button type="button" class="settings-button settings-save-button">Save selections</button>
+                            <div class="settings-save-status" id="settings-download-status" role="status" aria-live="polite"></div>
+                        </div>
+                    </div>
+                    <div class="settings-row settings-row-stack">
+                        <span>Download parameters by topic</span>
+                        <div class="settings-table settings-table-scroll settings-download-table">
+                            <div class="settings-table-row settings-table-header">
+                                <span>Topic</span>
+                                <span>Papers owned</span>
+                                <span>Owned start</span>
+                                <span>Owned end</span>
+                                <span>Desired start</span>
+                                <span>Desired end</span>
+                                <span>Limit</span>
+                                <span>Published</span>
+                            </div>
+                            {% for topic in settings_download_topics %}
+                            {% set topic_stats = settings_topic_stats | selectattr('display_name', 'equalto', topic.display_name) | list %}
+                            {% set topic_stat = topic_stats[0] if topic_stats else None %}
+                            {% set download_values = topic.download_values %}
+                            <div class="settings-table-row settings-download-row" data-topic="{{ topic.name }}">
+                                <span>{{ topic.display_name }}</span>
+                                <span>{{ topic_stat.paper_count_display if topic_stat else '—' }}</span>
+                                <span>{{ settings_date_range.start }}</span>
+                                <span>{{ settings_date_range.end }}</span>
+                                <input class="settings-input" type="text" name="download_start_{{ topic.name }}" placeholder="DD/MM/YYYY" value="{{ download_values.start if download_values and download_values.start else '' }}">
+                                <input class="settings-input" type="text" name="download_end_{{ topic.name }}" placeholder="DD/MM/YYYY" value="{{ download_values.end if download_values and download_values.end else '' }}">
+                                <input class="settings-input" type="number" min="1" step="1" name="download_limit_{{ topic.name }}" placeholder="e.g. 50" value="{{ download_values.limit if download_values and download_values.limit is not none else '' }}">
+                                <label class="settings-checkbox-inline">
+                                    <input type="checkbox" name="download_published_{{ topic.name }}" {% if download_values and download_values.published %}checked{% endif %}>
+                                    <span>Published</span>
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span>First paper date</span>
+                        <span class="settings-value">{{ settings_date_range.start }}</span>
+                    </div>
+                    <div class="settings-row">
+                        <span>Latest paper date</span>
+                        <span class="settings-value">
+                            <span id="settings-end-date">{{ settings_date_range.end }}</span>
+                            <button type="button" class="settings-button" id="settings-today-button">Today</button>
+                        </span>
+                    </div>
+                    <p class="settings-note">Dates define the paper download window for the next ingestion run.</p>
+                    <button type="button" class="settings-button settings-download-button">Download new papers</button>
+                </div>
+            </section>
+            <section class="settings-panel" id="settings-storage" role="tabpanel" aria-hidden="true">
+                <h4>Storage</h4>
+                <div class="settings-card">
+                    <p>Review cached content and reclaim space.</p>
+                    <div class="settings-row">
+                        <span>Cached papers</span>
+                        <span class="settings-value">{{ settings_storage_papers_display }} items</span>
+                    </div>
+                    <div class="settings-row">
+                        <span>Thumbnails</span>
+                        <span class="settings-value">{{ settings_storage_thumbs }}</span>
+                    </div>
+                    <div class="settings-row">
+                        <span>Text cache</span>
+                        <span class="settings-value">{{ settings_storage_text }}</span>
+                    </div>
+                    <div class="settings-row">
+                        <span>PDFs</span>
+                        <span class="settings-value">{{ settings_storage_pdfs }}</span>
+                    </div>
+                    <div class="settings-row">
+                        <span>HNSW index</span>
+                        <span class="settings-value">{{ settings_storage_hnsw }}</span>
+                    </div>
+                    <div class="settings-row">
+                        <span>Total</span>
+                        <span class="settings-value">{{ settings_storage_total }}</span>
+                    </div>
+                </div>
+            </section>
+            <section class="settings-panel" id="settings-stats" role="tabpanel" aria-hidden="true">
+                <h4>Stats</h4>
+                <div class="settings-card">
+                    <p>Category coverage across the database.</p>
+                    <div class="settings-row settings-row-stack">
+                        <span>Per-category metrics</span>
+                        <div class="settings-table settings-table-scroll">
+                            <div class="settings-table-row settings-table-header">
+                                <span>Category</span>
+                                <span>Papers</span>
+                                <span>Papers/day</span>
+                                <span>Citations</span>
+                                <span>Avg score</span>
+                            </div>
+                            {% for row in settings_topic_stats %}
+                            <div class="settings-table-row">
+                                <span>{{ row.display_name }}</span>
+                                <span>{{ row.paper_count_display }}</span>
+                                <span>{{ row.papers_per_day_display }}</span>
+                                <span>{{ row.citations_total_display }}</span>
+                                <span>{{ row.avg_score_display }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <p class="settings-note">Sorted by total papers. Scroll to see the full list beyond the first 10.</p>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>

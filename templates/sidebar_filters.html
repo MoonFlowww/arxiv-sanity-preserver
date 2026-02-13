@@ -1,0 +1,157 @@
+<aside class="filter-panel">
+    <h2>Filters</h2>
+    <form class="filter-form" method="get" action="/search">
+
+        <!-- SEARCH BAR -->
+        <div class="filter-group">
+            <label for="qfield">Search</label>
+            <input name="q" type="search" id="qfield" placeholder="Keywords..." value="{{ search_query }}">
+        </div>
+
+        <!-- TOPICS (Multi-select tags) -->
+
+        {% set sorted_topics = topics|sort(attribute='count', reverse=True) %}
+        {% set selected_sorted = sorted_topics|selectattr('name', 'in', selected_topics)|list %}
+        {% set unselected_sorted = sorted_topics|rejectattr('name', 'in', selected_topics)|list %}
+        {% set display_topics = selected_sorted + unselected_sorted %}
+        {% set max_label_length = 18 %}
+        <div class="filter-group">
+            <label>Topics</label>
+            <div class="topic-cluster">
+                <input
+                        type="search"
+                        id="topic-search"
+                        class="topic-search"
+                        placeholder="Search topics..."
+                        autocomplete="off"
+                />
+                <div class="tag-list limited" id="topic-tags">
+                    {% for topic in display_topics %}
+                    {% set full_name = topic.display_name %}
+                    {# {% set truncated_name = full_name|truncate_topic_name(max_label_length) %} #}
+                    <label class="tag">
+                        <input
+                                type="checkbox"
+                                name="topics[]"
+                                value="{{ topic.name }}"
+                                {% if topic.name in selected_topics %}checked{% endif %}
+                        />
+                        <span data-full-name="{{ full_name }}">{{ full_name }} ({{ topic.count }})</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- SCORE FILTER -->
+        <div class="filter-group">
+            <label for="scorebar">Minimum Score</label>
+            <input
+                    id="scorebar"
+                    name="min_score"
+                    type="text"
+                    placeholder="e.g. 2.5"
+                    inputmode="decimal"
+                    pattern="[0-9]*[.]?[0-9]*"
+                    value="{{ min_score }}"
+            />
+        </div>
+
+        <!-- AVAILABILITY FILTERS -->
+        <div class="filter-group">
+            <label>Others</label>
+            <label class="checkbox">
+                <input
+                        type="checkbox"
+                        name="open_source"
+                        value="1"
+                        {% if open_source %}checked{% endif %}
+                />
+                <span>Open-Source</span>
+            </label>
+            <label class="checkbox">
+                <input
+                        type="checkbox"
+                        name="publication_status"
+                        value="accepted_published"
+                        {% if 'accepted_published' in publication_statuses %}checked{% endif %}
+                />
+                <span>Accepted/Published</span>
+            </label>
+        </div>
+
+
+        <!-- SORT OPTIONS -->
+        <div class="sort-options">
+            <div class="sort-row">
+                <div class="filter-group sort-control">
+                    <label for="sortby">Sort By</label>
+                    <div class="sort-control-row">
+                        <div class="select-wrapper sort-select">
+                            {% set sort_by_value = sort_by or 'date' %}
+                            <select id="sortby" name="sortby" class="select-input">
+                                <option value="date" {% if sort_by_value==
+                                'date' %}selected{% endif %}>Date</option>
+                                <option value="score" {% if sort_by_value==
+                                'score' %}selected{% endif %}>Score</option>
+                                <option value="citation" {% if sort_by_value==
+                                'citation' %}selected{% endif %}>Citation</option>
+                            </select>
+                        </div>
+                        {% set sort_order_value = sort_order or 'desc' %}
+                        <div class="order-toggle" id="sortorder">
+                            <label class="order-option">
+                                <input type="radio" name="sortorder" value="desc" {% if sort_order_value== 'desc'
+                                %}checked{% endif %}>
+                                <span class="order-button order-desc">DESC</span>
+                            </label>
+                            <label class="order-option">
+                                <input type="radio" name="sortorder" value="asc" {% if sort_order_value== 'asc'
+                                %}checked{% endif %}>
+                                <span class="order-button order-asc">ASC</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ACTIONS -->
+        <div class="filter-actions">
+            <button type="submit" class="btn-primary">Search</button>
+            <button type="reset" class="btn-secondary">Reset</button>
+        </div>
+    </form>
+
+    <div class="ingest-card">
+        <h3>Add Paper</h3>
+        <form id="ingest-form" class="ingest-form" method="post" action="/ingest">
+            <div class="filter-group">
+                <label for="paper-id-input">arXiv identifier</label>
+                <input
+                        id="paper-id-input"
+                        name="paper_id"
+                        type="text"
+                        placeholder="e.g. 1512.08756v2"
+                        required
+                />
+            </div>
+            <p class="ingest-help">We will download the PDF, extract text, and refresh caches for the new paper.</p>
+            <button type="submit" class="btn-primary ingest-submit" aria-busy="false">
+                <span class="btn-label">Add paper</span>
+                <span class="btn-progress" aria-hidden="true">
+                        <span class="btn-progress-label" id="ingest-button-label">Preparing to start the ingest process...</span>
+                        <span class="btn-progress-track">
+                            <span class="btn-progress-bar" id="ingest-button-progress"></span>
+                        </span>
+                    </span>
+            </button>
+        </form>
+        <div class="recompute-status-panel" id="recompute-status-panel" aria-hidden="true">
+            <div class="recompute-status-content">
+                <span id="recompute-status-text">Recomputing caches...</span>
+                <span class="recompute-progress" id="recompute-status-percent">0%</span>
+            </div>
+        </div>
+    </div>
+</aside>

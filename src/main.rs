@@ -24,10 +24,10 @@ use std::time::Duration;
 use stop_words::{get, LANGUAGE};
 use wait_timeout::ChildExt;
 
+use crate::hnsw_index::HnswIndex;
 use arxiv_sanity_pipeline::cache;
 use arxiv_sanity_pipeline::db::Database;
 use arxiv_sanity_pipeline::utils;
-use crate::hnsw_index::HnswIndex;
 
 mod download;
 mod hnsw_index;
@@ -201,6 +201,8 @@ enum Commands {
     MigrateAnalysis(MigrateAnalysisArgs),
     #[command(name = "migrate-db", alias = "migrate_db")]
     MigrateDb(MigrateDbArgs),
+    #[command(name = "backfill-db-metadata", alias = "backfill_db_metadata")]
+    BackfillDbMetadata(BackfillDbMetadataArgs),
     #[command(name = "serve")]
     Serve(ServeCommandArgs),
     #[command(name = "twitter-daemon", alias = "twitter_daemon")]
@@ -268,7 +270,10 @@ struct DownloadArgs {}
 
 #[derive(Args, Debug, Clone)]
 struct IngestSinglePaperArgs {
-    #[arg(value_name = "paper_id", help = "arXiv identifier(s), supports arXiv: prefix and semicolon-separated list, e.g., arXiv:1512.08756; 1112.1120")]
+    #[arg(
+        value_name = "paper_id",
+        help = "arXiv identifier(s), supports arXiv: prefix and semicolon-separated list, e.g., arXiv:1512.08756; 1112.1120"
+    )]
     paper_id: Option<String>,
     #[arg(
         long = "no-recompute",
@@ -299,7 +304,11 @@ struct MigrateDbArgs {
     #[arg(long, default_value = DEFAULT_DB_JSONL_OUT)]
     output: PathBuf,
 }
-
+#[derive(Args, Debug, Clone)]
+struct BackfillDbMetadataArgs {
+    #[arg(long, default_value = DEFAULT_DB_JSONL_OUT)]
+    db_path: PathBuf,
+}
 #[derive(Args, Debug, Clone)]
 struct ServeCommandArgs {
     #[arg(
@@ -316,11 +325,7 @@ struct ServeCommandArgs {
         help = "number of results to return per query"
     )]
     num_results: usize,
-    #[arg(
-        long = "port",
-        default_value_t = 5000,
-        help = "port to serve on"
-    )]
+    #[arg(long = "port", default_value_t = 5000, help = "port to serve on")]
     port: u16,
 }
 
@@ -362,7 +367,13 @@ struct Paper {
     abstract_text: String,
     updated: String,
     #[serde(default)]
+    published: Option<String>,
+    #[serde(default)]
     time_published: Option<i64>,
+    #[serde(default)]
+    arxiv_comment: Option<String>,
+    #[serde(default)]
+    num_pages: Option<i32>,
 
     categories: Vec<String>,
     #[serde(default)]
@@ -372,6 +383,92 @@ struct Paper {
     #[serde(default)]
     is_published: Option<bool>,
 }
+
+fn parse_page_count_from_text(text: &str) -> Option<i32> {
+    static PAGE_COUNT_RE: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"(?i)\b(\d{1,4})\s*(?:pages?|pp\.?)(?:\b|\s)").expect("valid page count regex")
+    });
+    static PAGE_RANGE_RE: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"\b(\d{1,4})\s*[-–]\s*(\d{1,4})\b").expect("valid page range regex")
+    });
+
+    if let Some(captures) = PAGE_COUNT_RE.captures(text) {
+        return captures
+            .get(1)
+            .and_then(|value| value.as_str().parse::<i32>().ok());
+    }
+
+    PAGE_RANGE_RE.captures(text).and_then(|captures| {
+        let start = captures.get(1)?.as_str().parse::<i32>().ok()?;
+        let end = captures.get(2)?.as_str().parse::<i32>().ok()?;
+        (end >= start).then_some(end - start + 1)
+    })
+}
+
+pub(crate) fn parse_num_pages_from_metadata(
+    arxiv_comment: Option<&str>,
+    journal_ref: Option<&str>,
+) -> Option<i32> {
+    // Heuristic: arXiv Atom feeds do not provide a dedicated page-count field.
+    // We first look for explicit "N pages" patterns in arxiv:comment/journal_ref,
+    // then fall back to journal page ranges like "123-136" => 14 pages.
+    arxiv_comment
+        .and_then(parse_page_count_from_text)
+        .or_else(|| journal_ref.and_then(parse_page_count_from_text))
+}
+
+fn decode_xml_entities(input: &str) -> String {
+    input
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+}
+
+fn capture_atom_tag(entry_xml: &str, tag: &str) -> Option<String> {
+    let pattern = format!(r"(?s)<{tag}>(.*?)</{tag}>");
+    let re = Regex::new(&pattern).ok()?;
+    re.captures(entry_xml)
+        .and_then(|caps| caps.get(1))
+        .map(|m| decode_xml_entities(m.as_str().trim()))
+        .filter(|value| !value.is_empty())
+}
+
+pub(crate) fn parse_arxiv_entry_metadata_map(
+    atom_xml: &str,
+) -> HashMap<String, (Option<String>, Option<String>, Option<String>)> {
+    let entry_re = Regex::new(r"(?s)<entry\b[^>]*>(.*?)</entry>").expect("valid entry regex");
+    let mut metadata = HashMap::new();
+    for caps in entry_re.captures_iter(atom_xml) {
+        let Some(entry_xml) = caps.get(1).map(|m| m.as_str()) else {
+            continue;
+        };
+        let Some(id_url) = capture_atom_tag(entry_xml, "id") else {
+            continue;
+        };
+        if let Ok((raw_id, _)) = parse_arxiv_url(&id_url) {
+            let published = capture_atom_tag(entry_xml, "published");
+            let arxiv_comment = capture_atom_tag(entry_xml, "arxiv:comment");
+            let journal_ref = capture_atom_tag(entry_xml, "arxiv:journal_ref");
+            metadata.insert(raw_id, (published, arxiv_comment, journal_ref));
+        }
+    }
+    metadata
+}
+
+pub(crate) fn extract_arxiv_entry_metadata(
+    raw_id: &str,
+    entry_published: Option<String>,
+    metadata: &HashMap<String, (Option<String>, Option<String>, Option<String>)>,
+) -> (Option<String>, Option<String>, Option<i32>) {
+    let (published_from_xml, arxiv_comment, journal_ref) =
+        metadata.get(raw_id).cloned().unwrap_or((None, None, None));
+    let published = entry_published.or(published_from_xml);
+    let num_pages = parse_num_pages_from_metadata(arxiv_comment.as_deref(), journal_ref.as_deref());
+    (published, arxiv_comment, num_pages)
+}
+
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct TfidfMatrix {
@@ -469,10 +566,7 @@ struct OpenAlexMetadata {
     is_published: Option<bool>,
 }
 
-fn fetch_openalex_metadata(
-    client: &reqwest::blocking::Client,
-    title: &str,
-) -> OpenAlexMetadata {
+fn fetch_openalex_metadata(client: &reqwest::blocking::Client, title: &str) -> OpenAlexMetadata {
     let mut metadata = OpenAlexMetadata::default();
     let title = title.trim();
     if title.is_empty() {
@@ -492,7 +586,10 @@ fn fetch_openalex_metadata(
     let response = match resp {
         Ok(response) => response,
         Err(err) => {
-            println!("Unexpected error fetching OpenAlex metadata for {}: {}", title, err);
+            println!(
+                "Unexpected error fetching OpenAlex metadata for {}: {}",
+                title, err
+            );
             return metadata;
         }
     };
@@ -511,14 +608,20 @@ fn fetch_openalex_metadata(
     let body = match response.text() {
         Ok(text) => text,
         Err(err) => {
-            println!("Unexpected error reading OpenAlex response for {}: {}", title, err);
+            println!(
+                "Unexpected error reading OpenAlex response for {}: {}",
+                title, err
+            );
             return metadata;
         }
     };
     let payload: Value = match serde_json::from_str(&body) {
         Ok(value) => value,
         Err(err) => {
-            println!("Unexpected error parsing OpenAlex response for {}: {}", title, err);
+            println!(
+                "Unexpected error parsing OpenAlex response for {}: {}",
+                title, err
+            );
             return metadata;
         }
     };
@@ -888,29 +991,27 @@ fn run_thumb_pdf(args: &ThumbArgs, config: &PipelineConfig) -> Result<(), String
         let thumb_dir = Arc::clone(&thumb_dir);
         let tmp_dir = Arc::clone(&tmp_dir);
         let progress = Arc::clone(&progress);
-        handles.push(std::thread::spawn(move || {
-            loop {
-                let pdf_path = {
-                    let mut guard = queue.lock().expect("queue mutex poisoned");
-                    guard.pop_front()
-                };
-                let pdf_path = match pdf_path {
-                    Some(path) => path,
-                    None => break,
-                };
+        handles.push(std::thread::spawn(move || loop {
+            let pdf_path = {
+                let mut guard = queue.lock().expect("queue mutex poisoned");
+                guard.pop_front()
+            };
+            let pdf_path = match pdf_path {
+                Some(path) => path,
+                None => break,
+            };
 
-                let idx = progress.fetch_add(1, AtomicOrdering::SeqCst) + 1;
-                let file_name = pdf_path
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .unwrap_or("<unknown>");
-                println!("{}/{} processing {}", idx, total, file_name);
-                if let Err(err) = render_thumbnail_for_pdf(&pdf_path, &thumb_dir, &tmp_dir) {
-                    let arxiv_id = arxiv_id_from_filename(&pdf_path);
-                    eprintln!("failed to render thumbnail for {arxiv_id}: {err}");
-                }
-                sleep(Duration::from_millis(10));
+            let idx = progress.fetch_add(1, AtomicOrdering::SeqCst) + 1;
+            let file_name = pdf_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("<unknown>");
+            println!("{}/{} processing {}", idx, total, file_name);
+            if let Err(err) = render_thumbnail_for_pdf(&pdf_path, &thumb_dir, &tmp_dir) {
+                let arxiv_id = arxiv_id_from_filename(&pdf_path);
+                eprintln!("failed to render thumbnail for {arxiv_id}: {err}");
             }
+            sleep(Duration::from_millis(10));
         }));
     }
 
@@ -1249,6 +1350,9 @@ fn fetch_for_query(
             .bytes()
             .map_err(|err| format!("Failed to read response bytes: {err}"))?;
 
+        let atom_xml = String::from_utf8_lossy(&response).to_string();
+        let metadata_map = parse_arxiv_entry_metadata_map(&atom_xml);
+
         let feed = parser::parse(&response[..])
             .map_err(|err| format!("Failed to parse Atom feed: {err}"))?;
         let mut num_added = 0;
@@ -1280,6 +1384,11 @@ fn fetch_for_query(
                 .map(|author| author.name.clone())
                 .collect::<Vec<_>>();
             let updated = entry.updated.map(|dt| dt.to_string()).unwrap_or_default();
+            let (published, arxiv_comment, num_pages) = extract_arxiv_entry_metadata(
+                &raw_id,
+                entry.published.map(|dt| dt.to_string()),
+                &metadata_map,
+            );
             let categories = entry
                 .categories
                 .iter()
@@ -1293,7 +1402,10 @@ fn fetch_for_query(
                 authors,
                 abstract_text,
                 updated,
+                published,
                 time_published: None,
+                arxiv_comment,
+                num_pages,
                 categories,
                 citation_count: openalex_metadata.citation_count,
                 is_accepted: openalex_metadata.is_accepted,
@@ -1415,9 +1527,8 @@ fn resolve_path(cwd: &Path, path: &Path) -> PathBuf {
 
 fn reset_pipeline_warning(config: &PipelineConfig) -> Result<String, String> {
     let targets = resolve_reset_targets(config)?;
-    let mut message = String::from(
-        "WARNING: reset-pipeline will delete the following resolved paths:\n",
-    );
+    let mut message =
+        String::from("WARNING: reset-pipeline will delete the following resolved paths:\n");
     for path in targets.all_paths() {
         message.push_str(&format!("  - {}\n", path.display()));
     }
@@ -1491,6 +1602,7 @@ fn run_rust_command(
         }
         Commands::MigrateAnalysis(args) => migrate::run_migrate_analysis(&args),
         Commands::MigrateDb(args) => migrate::run_migrate_db(&args),
+        Commands::BackfillDbMetadata(args) => migrate::run_backfill_db_metadata(&args),
         Commands::Serve(args) => {
             let rt = tokio::runtime::Runtime::new()
                 .map_err(|err| format!("Failed to create runtime: {err}"))?;

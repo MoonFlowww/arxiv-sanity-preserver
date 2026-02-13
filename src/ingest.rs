@@ -1,8 +1,8 @@
+use crate::hnsw_index::HnswIndex;
 use feed_rs::parser;
 use reqwest::blocking::Client;
 use std::fs;
 use std::path::{Path, PathBuf};
-use crate::hnsw_index::HnswIndex;
 
 use crate::download;
 use crate::{

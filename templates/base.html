@@ -1,0 +1,881 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>Arxiv Sanity Preserver</title>
+
+    <!-- MathJax -->
+    <script type="text/x-mathjax-config">
+        MathJax.Hub.Config({tex2jax: {inlineMath: [['$','$'], ['\\(','\\)']]}});
+    </script>
+    <script type="text/javascript" async
+            src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS_CHTML">
+    </script>
+
+    <!-- CSS -->
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css') }}">
+
+    <!-- Favicon -->
+    <link rel="shortcut icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}"/>
+
+    <!-- JS -->
+    <script src="{{ url_for('static', filename='jquery-1.8.3.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='d3.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='as-common.js') }}"></script>
+
+    <!-- Google Analytics JS -->
+    <script>
+        (function (i, s, o, g, r, a, m) {
+            i['GoogleAnalyticsObject'] = r;
+            i[r] = i[r] || function () {
+                (i[r].q = i[r].q || []).push(arguments)
+            }, i[r].l = 1 * new Date();
+            a = s.createElement(o),
+                m = s.getElementsByTagName(o)[0];
+            a.async = 1;
+            a.src = g;
+            m.parentNode.insertBefore(a, m)
+        })(window, document, 'script', 'https://www.google-analytics.com/analytics.js', 'ga');
+
+        ga('create', 'UA-3698471-25', 'auto');
+        ga('send', 'pageview');
+
+    </script>
+    <script>
+        var themePreference = null;
+        function getStoredTheme() {
+            try {
+                return localStorage.getItem('theme');
+            } catch (error) {
+                return themePreference;
+            }
+        }
+        function setStoredTheme(value) {
+            themePreference = value;
+            try {
+                localStorage.setItem('theme', value);
+            } catch (error) {
+                // ignore storage errors
+            }
+        }
+        (function () {
+            var storedTheme = getStoredTheme();
+            if (!storedTheme) {
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                storedTheme = prefersDark ? 'dark' : 'light';
+            }
+            if (storedTheme === 'dark') {
+                document.documentElement.classList.add('dark-mode');
+            }
+        })();
+
+        function getThemeIconMarkup(isDark) {
+            // If isDark === true, show "sun" (action: switch to light)
+            // If isDark === false, show "moon" (action: switch to dark)
+
+            var sunIcon =
+                '<svg class="theme-icon__svg" viewBox="0 0 24 24" role="img" focusable="false" aria-hidden="true"' +
+                ' width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"' +
+                ' stroke-linecap="round" stroke-linejoin="round">' +
+                '<circle cx="12" cy="12" r="4"></circle>' +
+                '<path d="M12 2v2.5M12 19.5V22M4.93 4.93l1.77 1.77M17.3 17.3l1.77 1.77' +
+                'M2 12h2.5M19.5 12H22M4.93 19.07l1.77-1.77M17.3 6.7l1.77-1.77"></path>' +
+                '</svg>';
+
+            // Crescent moon with outline stroke (not a filled blob)
+            var moonIcon =
+                '<svg class="theme-icon__svg" viewBox="0 0 24 24" role="img" focusable="false" aria-hidden="true"' +
+                ' width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"' +
+                ' stroke-linecap="round" stroke-linejoin="round">' +
+                '<path d="M21 14.3A8.2 8.2 0 0 1 9.7 3.1' +
+                'a7.2 7.2 0 1 0 11.3 11.2Z"></path>' +
+                '</svg>';
+
+            return '<span class="theme-icon" aria-hidden="true">' + (isDark ? sunIcon : moonIcon) + '</span>';
+        }
+
+
+
+        function initThemeToggle() {
+            var toggleButton = document.querySelector('.theme-toggle');
+            if (!toggleButton) {
+                return;
+            }
+            var setLabel = function () {
+                var isDark = document.documentElement.classList.contains('dark-mode');
+                toggleButton.innerHTML = getThemeIconMarkup(isDark);
+                toggleButton.setAttribute('aria-pressed', isDark ? 'true' : 'false');
+                toggleButton.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+                updateSettingsPanelValues();
+            };
+            setLabel();
+            toggleButton.addEventListener('click', function () {
+                document.documentElement.classList.toggle('dark-mode');
+                var isDark = document.documentElement.classList.contains('dark-mode');
+                setStoredTheme(isDark ? 'dark' : 'light');
+                setLabel();
+            });
+        }
+        function updateSettingsPanelValues() {
+            var layoutValue = document.getElementById('settings-layout-value');
+            var themeValue = document.getElementById('settings-theme-value');
+            var endDateValue = document.getElementById('settings-end-date');
+            var todayButton = document.getElementById('settings-today-button');
+
+            if (layoutValue) {
+                var storedLayout = null;
+                try {
+                    storedLayout = localStorage.getItem('preferredLayout');
+                } catch (e) {
+                }
+                var layoutChoice = storedLayout;
+                if (!layoutChoice) {
+                    var rtable = document.getElementById('rtable');
+                    layoutChoice = rtable ? rtable.getAttribute('data-layout') : null;
+                }
+                layoutChoice = layoutChoice === 'single' ? 'single' : 'double';
+                layoutValue.textContent = layoutChoice === 'single' ? 'Single-column' : 'Two-column';
+            }
+
+            if (themeValue) {
+                var storedTheme = getStoredTheme();
+                if (!storedTheme) {
+                    themeValue.textContent = 'System';
+                } else {
+                    themeValue.textContent = storedTheme === 'dark' ? 'Dark' : 'Light';
+                }
+            }
+
+            if (todayButton && endDateValue && !todayButton.dataset.bound) {
+                todayButton.addEventListener('click', function () {
+                    var today = new Date();
+                    var day = String(today.getDate()).padStart(2, '0');
+                    var month = String(today.getMonth() + 1).padStart(2, '0');
+                    var formatted = day + '/' + month + '/' + today.getFullYear();
+                    endDateValue.textContent = formatted;
+                });
+                todayButton.dataset.bound = 'true';
+            }
+        }
+        function initSettingsModal() {
+            var openButton = document.querySelector('.settings-toggle');
+            var overlay = document.getElementById('settings-overlay');
+            if (!openButton || !overlay) {
+                return;
+            }
+            var closeButton = overlay.querySelector('.settings-close');
+            var tabButtons = overlay.querySelectorAll('.settings-tab');
+            var tabPanels = overlay.querySelectorAll('.settings-panel');
+
+            var showOverlay = function () {
+                overlay.classList.add('visible');
+                overlay.setAttribute('aria-hidden', 'false');
+                startHealthPolling();
+                if (tabButtons.length) {
+                    try {
+                        tabButtons[0].focus({ preventScroll: true });
+                    } catch (error) {
+                        tabButtons[0].focus();
+                    }
+                }
+            };
+
+            var hideOverlay = function () {
+                overlay.classList.remove('visible');
+                overlay.setAttribute('aria-hidden', 'true');
+                stopHealthPolling();
+                openButton.focus();
+                if (window.resetSettingsTopicSearch) {
+                    window.resetSettingsTopicSearch();
+                }
+            };
+
+            var setActiveTab = function (targetId) {
+                tabButtons.forEach(function (button) {
+                    var isActive = button.getAttribute('data-tab') === targetId;
+                    button.classList.toggle('active', isActive);
+                    button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                });
+                tabPanels.forEach(function (panel) {
+                    var isActive = panel.id === targetId;
+                    panel.classList.toggle('active', isActive);
+                    panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+                });
+            };
+
+            openButton.addEventListener('click', function (event) {
+                event.preventDefault();
+                showOverlay();
+            });
+            closeButton.addEventListener('click', hideOverlay);
+            overlay.addEventListener('click', function (event) {
+                if (event.target === overlay) {
+                    hideOverlay();
+                }
+            });
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape' && overlay.classList.contains('visible')) {
+                    hideOverlay();
+                }
+            });
+
+            tabButtons.forEach(function (button) {
+                button.addEventListener('click', function () {
+                    setActiveTab(button.getAttribute('data-tab'));
+                });
+            });
+
+            if (tabButtons.length) {
+                setActiveTab(tabButtons[0].getAttribute('data-tab'));
+            }
+        }
+        function initDownloadSettingsPanel() {
+            var topicContainer = document.getElementById('settings-topic-tags');
+            if (!topicContainer) {
+                return;
+            }
+            var topicInputs = topicContainer.querySelectorAll('input[type="checkbox"]');
+            var rows = document.querySelectorAll('.settings-download-row');
+            var selectedContainer = document.getElementById('settings-selected-topics');
+            var updateRows = function () {
+                rows.forEach(function (row) {
+                    var topicValue = row.getAttribute('data-topic');
+                    var input = topicContainer.querySelector('input[value="' + topicValue + '"]');
+                    var isChecked = input ? input.checked : false;
+                    row.classList.toggle('is-hidden', !isChecked);
+                });
+            };
+            var renderSelectedTopics = function () {
+                if (!selectedContainer) {
+                    return;
+                }
+                selectedContainer.innerHTML = '';
+                var selectedInputs = Array.prototype.filter.call(topicInputs, function (input) {
+                    return input.checked;
+                });
+                if (!selectedInputs.length) {
+                    var empty = document.createElement('span');
+                    empty.className = 'settings-topic-empty';
+                    empty.textContent = 'No topics selected';
+                    selectedContainer.appendChild(empty);
+                    return;
+                }
+                selectedInputs.forEach(function (input) {
+                    var label = input.closest('label');
+                    var labelSpan = label ? label.querySelector('span') : null;
+                    var chip = document.createElement('span');
+                    chip.className = 'settings-chip selected';
+                    chip.textContent = labelSpan ? labelSpan.textContent : input.value;
+                    selectedContainer.appendChild(chip);
+                });
+            };
+            topicInputs.forEach(function (input) {
+                input.addEventListener('change', function () {
+                    updateRows();
+                    renderSelectedTopics();
+                });
+            });
+            updateRows();
+            renderSelectedTopics();
+
+            var saveButton = document.querySelector('.settings-save-button');
+            var runButton = document.querySelector('.settings-download-button');
+            var statusMessage = document.getElementById('settings-download-status');
+            var setStatusMessage = function (message, isError) {
+                if (!statusMessage) {
+                    return;
+                }
+                statusMessage.textContent = message || '';
+                statusMessage.classList.toggle('is-error', Boolean(isError));
+                statusMessage.classList.toggle('is-success', Boolean(message) && !isError);
+            };
+            var normalizeDateInput = function (value) {
+                if (!value) {
+                    return { value: null, date: null, error: null };
+                }
+                var trimmed = value.trim();
+                if (!trimmed) {
+                    return { value: null, date: null, error: null };
+                }
+                var match = trimmed.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+                if (!match) {
+                    return { value: null, date: null, error: 'Use DD/MM/YYYY' };
+                }
+                var day = parseInt(match[1], 10);
+                var month = parseInt(match[2], 10);
+                var year = parseInt(match[3], 10);
+                var date = new Date(year, month - 1, day);
+                if (
+                    date.getFullYear() !== year ||
+                    date.getMonth() !== month - 1 ||
+                    date.getDate() !== day
+                ) {
+                    return { value: null, date: null, error: 'Invalid date: ' + trimmed };
+                }
+                var normalized =
+                    String(day).padStart(2, '0') +
+                    '/' +
+                    String(month).padStart(2, '0') +
+                    '/' +
+                    String(year);
+                return { value: normalized, date: date, error: null };
+            };
+            var buildDownloadSettingsPayload = function () {
+                var payload = {
+                    selected_topics: [],
+                    topics: {}
+                };
+                var errors = [];
+                topicInputs.forEach(function (input) {
+                    if (input.checked) {
+                        payload.selected_topics.push(input.value);
+                    }
+                });
+                rows.forEach(function (row) {
+                    var topicValue = row.getAttribute('data-topic');
+                    var topicLabel = row.querySelector('span') ? row.querySelector('span').textContent : topicValue;
+                    var startInput = row.querySelector('input[name="download_start_' + topicValue + '"]');
+                    var endInput = row.querySelector('input[name="download_end_' + topicValue + '"]');
+                    var publishedInput = row.querySelector('input[name="download_published_' + topicValue + '"]');
+                    var limitInput = row.querySelector('input[name="download_limit_' + topicValue + '"]');
+                    var startResult = normalizeDateInput(startInput ? startInput.value : '');
+                    var endResult = normalizeDateInput(endInput ? endInput.value : '');
+                    if (startResult.error) {
+                        errors.push(topicLabel + ': ' + startResult.error);
+                    }
+                    if (endResult.error) {
+                        errors.push(topicLabel + ': ' + endResult.error);
+                    }
+                    if (startResult.value && endResult.value && startResult.date && endResult.date) {
+                        if (startResult.date > endResult.date) {
+                            errors.push(topicLabel + ': start date cannot be after end date');
+                        }
+                    }
+                    if (startInput && startResult.value) {
+                        startInput.value = startResult.value;
+                    }
+                    if (endInput && endResult.value) {
+                        endInput.value = endResult.value;
+                    }
+                    var limitValue = null;
+                    if (limitInput && limitInput.value) {
+                        var parsedLimit = parseInt(limitInput.value, 10);
+                        if (!isNaN(parsedLimit)) {
+                            limitValue = parsedLimit;
+                        }
+                    }
+                    payload.topics[topicValue] = {
+                        start: startResult.value,
+                        end: endResult.value,
+                        published: publishedInput ? publishedInput.checked : false,
+                        limit: limitValue
+                    };
+                });
+                return { payload: payload, errors: errors };
+            };
+            if (saveButton && !saveButton.dataset.bound) {
+                saveButton.addEventListener('click', function () {
+                    var original = saveButton.getAttribute('data-label') || saveButton.textContent;
+                    saveButton.setAttribute('data-label', original);
+                    saveButton.textContent = 'Saving...';
+                    saveButton.classList.remove('saved');
+                    setStatusMessage('Saving selections...', false);
+
+                    var payloadResult = buildDownloadSettingsPayload();
+                    if (payloadResult.errors.length) {
+                        saveButton.textContent = original;
+                        setStatusMessage(payloadResult.errors[0], true);
+                        return;
+                    }
+
+                    fetch('/settings/download', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(payloadResult.payload)
+                    }).then(function (response) {
+                        if (!response.ok) {
+                            return response.json().then(function (data) {
+                                var errorMessage = data && data.error ? data.error : 'Unable to save selections.';
+                                throw new Error(errorMessage);
+                            });
+                        }
+                        return response.json();
+                    }).then(function () {
+                        saveButton.textContent = 'Saved';
+                        saveButton.classList.add('saved');
+                        setStatusMessage('Selections saved.', false);
+                        setTimeout(function () {
+                            saveButton.textContent = original;
+                            saveButton.classList.remove('saved');
+                        }, 1500);
+                    }).catch(function (error) {
+                        saveButton.textContent = original;
+                        saveButton.classList.remove('saved');
+                        setStatusMessage(error.message || 'Unable to save selections.', true);
+                    });
+                });
+                saveButton.dataset.bound = 'true';
+            }
+            if (runButton && !runButton.dataset.bound) {
+                runButton.addEventListener('click', function () {
+                    var original = runButton.getAttribute('data-label') || runButton.textContent;
+                    runButton.setAttribute('data-label', original);
+                    runButton.textContent = 'Starting download...';
+                    runButton.disabled = true;
+                    setStatusMessage('Starting download...', false);
+
+                    var payloadResult = buildDownloadSettingsPayload();
+                    if (payloadResult.errors.length) {
+                        runButton.textContent = original;
+                        runButton.disabled = false;
+                        setStatusMessage(payloadResult.errors[0], true);
+                        return;
+                    }
+
+                    fetch('/settings/download/run', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(payloadResult.payload)
+                    }).then(function (response) {
+                        if (!response.ok) {
+                            return response.json().then(function (data) {
+                                var errorMessage = data && data.error ? data.error : 'Unable to start download.';
+                                throw new Error(errorMessage);
+                            });
+                        }
+                        return response.json();
+                    }).then(function (data) {
+                        runButton.textContent = original;
+                        runButton.disabled = false;
+                        var successMessage = data && data.message ? data.message : 'Download started.';
+                        setStatusMessage(successMessage, false);
+                    }).catch(function (error) {
+                        runButton.textContent = original;
+                        runButton.disabled = false;
+                        setStatusMessage(error.message || 'Unable to start download.', true);
+                    });
+                });
+                runButton.dataset.bound = 'true';
+            }
+        }
+        var healthPoller = null;
+        function updateHealthStatus(connected, details) {
+            var statusValue = document.getElementById('settings-health-value');
+            var detailValue = document.getElementById('settings-health-details');
+            if (!statusValue) {
+                return;
+            }
+            statusValue.textContent = connected ? 'Connected' : 'Disconnected';
+            statusValue.classList.toggle('is-success', connected);
+            statusValue.classList.toggle('is-error', !connected);
+            if (detailValue) {
+                detailValue.textContent = details || '';
+            }
+        }
+        function checkHealthStatus() {
+            if (!document.getElementById('settings-health-value')) {
+                return;
+            }
+            fetch('/health', { cache: 'no-store' })
+                .then(function (response) {
+                    if (!response.ok) {
+                        throw new Error('Health check failed');
+                    }
+                    return response.json();
+                })
+                .then(function (data) {
+                    var detail = data && data.version ? 'v' + data.version : '';
+                    updateHealthStatus(Boolean(data && data.ok), detail);
+                })
+                .catch(function () {
+                    updateHealthStatus(false, '');
+                });
+        }
+        function startHealthPolling() {
+            if (healthPoller) {
+                return;
+            }
+            checkHealthStatus();
+            healthPoller = setInterval(checkHealthStatus, 15000);
+        }
+        function stopHealthPolling() {
+            if (healthPoller) {
+                clearInterval(healthPoller);
+                healthPoller = null;
+            }
+        }
+    </script>
+
+    <script>
+
+        // passed in from flask as json
+        var tweets = {{tweets | tojson }};
+
+        var papers = {{ papers | tojson }};
+
+        var msg = "{{ msg }}";
+        var render_format = "{{ render_format }}";
+        var numresults = "{{ numresults }}";
+        var show_prompt = "{{ show_prompt }}";
+
+        var urlq = ''; // global will be read in to QueryString when load is done
+
+        var ingestPoller = null;
+        var ingestLogIndex = 0;
+        var ingestJobId = null;
+        var recomputePoller = null;
+        var recomputeLastStatus = null;
+        function resetIngestState() {
+            $('#ingest-status-text').text('Preparing to start the ingest process...');
+            $('#ingest-progress-bar').css('width', '0%');
+            $('.ingest-progress').attr('aria-valuenow', 0);
+            $('#ingest-log').empty();
+            ingestLogIndex = 0;
+            updateIngestButtonProgress('Preparing to start the ingest process...', 0);
+        }
+
+        function updateIngestButtonProgress(label, percent) {
+            $('#ingest-button-label').text(label);
+            $('#ingest-button-progress').css('width', percent + '%');
+        }
+
+        function setIngestButtonBusy(isBusy) {
+            var button = $('.ingest-submit');
+            button.toggleClass('is-busy', isBusy);
+            button.attr('aria-busy', isBusy ? 'true' : 'false');
+            button.find('.btn-progress').attr('aria-hidden', isBusy ? 'false' : 'true');
+            if (!isBusy) {
+                updateIngestButtonProgress('Preparing to start the ingest process...', 0);
+            }
+        }
+
+        function updateIngestProgress(step) {
+            var status = $('#ingest-status-text');
+            var bar = $('#ingest-progress-bar');
+            var progressShell = $('.ingest-progress');
+
+            status.text(step.label);
+            bar.css('width', step.percent + '%');
+            progressShell.attr('aria-valuenow', step.percent);
+            updateIngestButtonProgress(step.label, step.percent);
+        }
+
+        function showIngestOverlay() {
+            $('#ingest-overlay').attr('aria-hidden', 'false').addClass('visible');
+        }
+
+        function hideIngestOverlay() {
+            $('#ingest-overlay').attr('aria-hidden', 'true').removeClass('visible');
+        }
+
+        function pollIngestStatus(jobId) {
+            ingestPoller = setInterval(function () {
+                $.getJSON('/ingest/status/' + jobId, function (data) {
+                    updateIngestProgress({label: data.label, percent: data.percent});
+                    if (data.messages && data.messages.length > ingestLogIndex) {
+                        var log = $('#ingest-log');
+                        for (var i = ingestLogIndex; i < data.messages.length; i++) {
+                            var line = $('<div></div>').text(data.messages[i]);
+                            log.append(line);
+                        }
+                        ingestLogIndex = data.messages.length;
+                        log.scrollTop(log[0].scrollHeight);
+                    }
+
+                    if (data.done) {
+                        clearInterval(ingestPoller);
+                        ingestPoller = null;
+                        ingestJobId = null;
+                        setIngestButtonBusy(false);
+                        if (data.error) {
+                            $('#ingest-status-text').text('Ingest failed');
+                        }
+                    }
+                }).fail(function () {
+                    clearInterval(ingestPoller);
+                    ingestPoller = null;
+                    ingestJobId = null;
+                    setIngestButtonBusy(false);
+                });
+            }, 1000);
+        }
+        function showRecomputePanel(message, percent, level) {
+            var panel = $('#recompute-status-panel');
+            var text = $('#recompute-status-text');
+            var progress = $('#recompute-status-percent');
+            var levelClass = level ? 'recompute-' + level : '';
+            var percentText = '—';
+
+            text.text(message);
+            if (typeof percent === 'number') {
+                percentText = percent + '%';
+            } else if (typeof percent === 'string' && percent.trim()) {
+                percentText = percent;
+            }
+            progress.text(percentText);
+            panel.removeClass('recompute-error recompute-info recompute-success');
+            if (levelClass) {
+                panel.addClass(levelClass);
+            }
+            panel.attr('aria-hidden', 'false').addClass('visible');
+        }
+
+        function hideRecomputePanel() {
+            $('#recompute-status-panel').attr('aria-hidden', 'true').removeClass('visible');
+        }
+
+
+        function updateRecomputeStatus(state) {
+            var status = state.status || 'idle';
+            recomputeLastStatus = status;
+            var isActive = status === 'running' || status === 'queued';
+            var percent = state.percent;
+            var message = state.message || (status === 'queued' ? 'Recompute queued...' : 'Recomputing caches...');
+
+            if (isActive) {
+                showRecomputePanel(message, percent, 'info');
+            } else {
+                hideRecomputePanel();
+                updateRecomputeBadge(status === 'finished');
+            }
+        }
+
+        function fetchRecomputeStatus() {
+            $.getJSON('/recompute/status', function (data) {
+                updateRecomputeStatus(data);
+            });
+        }
+
+        function startRecomputePolling() {
+            if (!recomputePoller) {
+                recomputePoller = setInterval(fetchRecomputeStatus, 2000);
+            }
+            fetchRecomputeStatus();
+        }
+
+
+        // when page loads...
+        $(document).ready(function () {
+
+            urlq = QueryString.q;
+
+            // display message, if any
+            if (msg !== '') {
+                d3.select("#rtable").append('div').classed('msg', true).html(msg);
+            }
+
+            // add papers to #rtable
+            var done = addPapers(10, false);
+            if (done) {
+                $("#loadmorebtn").hide();
+            }
+
+            // set up inifinite scrolling for adding more papers
+            $(window).on('scroll', function () {
+                var scrollTop = $(document).scrollTop();
+                var windowHeight = $(window).height();
+                var bodyHeight = $(document).height() - windowHeight;
+                var scrollPercentage = (scrollTop / bodyHeight);
+                if (scrollPercentage > 0.9) {
+                    var done = addPapers(5, true);
+                    if (done) {
+                        $("#loadmorebtn").hide();
+                    }
+                }
+            });
+
+            // just in case scrolling is broken somehow, provide a button handler explicit
+            $("#loadmorebtn").on('click', function () {
+                var done = addPapers(5, true);
+                if (done) {
+                    $("#loadmorebtn").hide();
+                }
+            });
+
+            if (papers.length === 0) {
+                $("#loadmorebtn").hide();
+            }
+
+            if (!(typeof urlq == 'undefined')) {
+                d3.select("#qfield").attr('value', urlq.replace(/\+/g, " "));
+            }
+
+            var xb = $("#xbanner");
+            if (xb.length !== 0) {
+                xb.click(function () {
+                    $("#banner").slideUp('fast');
+                })
+            }
+
+            $("#goaway").on('click', function () {
+                $("#prompt").slideUp('fast');
+                $.post("/goaway", {}).done(function (data) {
+                });
+            });
+
+            var topicSearch = $("#topic-search");
+            var topicTags = $("#topic-tags");
+            var settingsTopicSearch = $("#settings-topic-search");
+            var settingsTopicList = $(".settings-topic-list");
+
+            if (topicTags.length && topicSearch.length) {
+                var tags = topicTags.find('.tag');
+
+                topicSearch.on('input', function () {
+                    var query = $(this).val().toLowerCase().trim();
+
+                    if (query === '') {
+                        tags.show();
+                        topicTags.addClass('limited');
+                    } else {
+                        tags.each(function () {
+                            var text = $(this).text().toLowerCase();
+                            $(this).toggle(text.indexOf(query) !== -1);
+                        });
+                        topicTags.addClass('limited');
+                    }
+                });
+            }
+            if (settingsTopicSearch.length && settingsTopicList.length) {
+                var settingsTags = settingsTopicList.find('.tag');
+                var resetSettingsTopicSearch = function () {
+                    settingsTopicSearch.val('');
+                    settingsTags.show();
+                    settingsTopicList.addClass('limited');
+                };
+
+                settingsTopicSearch.on('input', function () {
+                    var query = $(this).val().toLowerCase().trim();
+
+                    if (query === '') {
+                        settingsTags.show();
+                        settingsTopicList.addClass('limited');
+                    } else {
+                        settingsTags.each(function () {
+                            var text = $(this).text().toLowerCase();
+                            $(this).toggle(text.indexOf(query) !== -1);
+                        });
+                        settingsTopicList.addClass('limited');
+                    }
+                });
+
+                window.resetSettingsTopicSearch = resetSettingsTopicSearch;
+            }
+
+            var filterForm = $('.filter-form');
+            if (filterForm.length) {
+                filterForm.on('reset', function () {
+                    setTimeout(function () {
+                        if (topicSearch.length && topicTags.length) {
+                            topicSearch.val('');
+                            topicTags.find('.tag').show();
+                            topicTags.addClass('limited');
+                        }
+                    }, 0);
+                });
+            }
+
+            var ingestForm = $('#ingest-form');
+            if (ingestForm.length) {
+                ingestForm.on('submit', function (event) {
+                    event.preventDefault();
+                    if (ingestJobId && ingestPoller) {
+                        showIngestOverlay();
+                        return;
+                    }
+                    resetIngestState();
+                    showIngestOverlay();
+                    setIngestButtonBusy(true);
+
+                    $.post('/ingest', ingestForm.serialize(), function (data) {
+                        if (data.error) {
+                            $('#ingest-status-text').text(data.error);
+                            setIngestButtonBusy(false);
+                            ingestJobId = null;
+                            return;
+                        }
+                        if (data.job_id) {
+                            ingestJobId = data.job_id;
+                            pollIngestStatus(ingestJobId);
+                        }
+                    }, 'json').fail(function () {
+                        $('#ingest-status-text').text('Could not start ingest. Please try again.');
+                        setIngestButtonBusy(false);
+                        ingestJobId = null;
+                    });
+                });
+            }
+            startRecomputePolling();
+
+            initLayoutToggle('.layout-btn');
+            initThemeToggle();
+            initSettingsModal();
+            initDownloadSettingsPanel();
+            updateSettingsPanelValues();
+            $('.layout-btn').on('click', updateSettingsPanelValues);
+            $('#ingest-overlay').on('click', function (event) {
+                if (event.target === this) {
+                    hideIngestOverlay();
+                }
+            });
+        });
+
+    </script>
+</head>
+
+<body>
+
+<!-- HEADER -->
+<div id="titdiv">
+    <!-- Site information/banner -->
+    <div class="header-actions">
+        <button type="button" class="settings-toggle" aria-haspopup="dialog">
+            Settings
+        </button>
+        <button type="button" class="theme-toggle" aria-label="Switch to dark mode" aria-pressed="false">
+            <span class="theme-icon" aria-hidden="true">🌙</span>
+        </button>
+    </div>
+    <a href="/">
+        <div id="tittxt">
+            <h1>Arxiv Sanity Preserver</h1>
+            <div class="site-subtitle">
+                Modified from Karpathy's version with updated UI & backend.<br>
+                Serving last {{ totpapers }} papers from cs.[CV|CL|LG|AI|NE]/stat.M
+            </div>
+        </div>
+    </a>
+</div>
+
+<!-- MAIN LAYOUT: SIDEBAR + CONTENT -->
+<div class="layout-container">
+    {% include 'partials/sidebar_filters.html' %}
+    <main id="maindiv">
+        {% block main_content %}{% endblock %}
+    </main>
+</div>
+
+<div class="ingest-overlay" id="ingest-overlay" aria-hidden="true">
+    <div class="ingest-modal" role="dialog" aria-labelledby="ingest-modal-title" aria-describedby="ingest-status-text">
+        <h3 id="ingest-modal-title">Adding new paper</h3>
+        <p class="ingest-status" id="ingest-status-text">Preparing to start the ingest process...</p>
+        <div class="ingest-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="ingest-progress-bar" id="ingest-progress-bar" style="width: 0%;"></div>
+        </div>
+        <div class="ingest-log" id="ingest-log" aria-live="polite"></div>
+        <p class="ingest-note">We'll download the PDF, extract the text, and refresh caches. Feel free to keep this tab
+            open while we work.</p>
+    </div>
+</div>
+
+{% include 'partials/settings_modal.html' %}
+
+<br><br>
+</body>
+
+</html>

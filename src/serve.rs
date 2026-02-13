@@ -1798,6 +1798,7 @@ async fn intmain(
             "render_format": "recent",
             "msg": "Showing most recent Arxiv papers:",
         }),
+        "home.html",
     ) {
         Ok(resp) => resp.into_response(),
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err).into_response(),
@@ -1824,6 +1825,7 @@ async fn rank(
         json!({
             "render_format": "paper",
         }),
+        "home.html",
     ) {
         Ok(resp) => resp.into_response(),
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err).into_response(),
@@ -1927,7 +1929,7 @@ async fn search(
         "sort_order": sort_order,
         "no_results_message": no_results_message,
     });
-    match build_context_response(&state, &env, &data, &papers, context) {
+    match build_context_response(&state, &env, &data, &papers, context, "home.html") {
         Ok(resp) => resp.into_response(),
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err).into_response(),
     }
@@ -1981,7 +1983,7 @@ async fn topics(
         "selected_topic": topic_name,
         "selected_topic_display": selected_topic_display,
     });
-    match build_context_response(&state, &env, &data, &papers, context) {
+    match build_context_response(&state, &env, &data, &papers, context, "home.html") {
         Ok(resp) => resp.into_response(),
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err).into_response(),
     }
@@ -2028,7 +2030,7 @@ async fn recommend(
         "render_format": "recommend",
         "msg": msg,
     });
-    match build_context_response(&state, &env, &data, &papers, context) {
+    match build_context_response(&state, &env, &data, &papers, context, "home.html") {
         Ok(resp) => resp.into_response(),
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err).into_response(),
     }
@@ -2080,7 +2082,7 @@ async fn top(
         "render_format": "top",
         "msg": "Top papers by OpenAlex recency-adjusted score:",
     });
-    match build_context_response(&state, &env, &data, &papers, context) {
+    match build_context_response(&state, &env, &data, &papers, context, "home.html") {
         Ok(resp) => resp.into_response(),
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err).into_response(),
     }
@@ -2102,7 +2104,7 @@ async fn toptwtr(
         "tweets": [],
         "msg": format!("Top papers mentioned on Twitter over last {}:", ttstr),
     });
-    match build_context_response(&state, &env, &data, &[], context) {
+    match build_context_response(&state, &env, &data, &[], context, "home.html") {
         Ok(resp) => resp.into_response(),
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err).into_response(),
     }
@@ -2125,7 +2127,7 @@ async fn library(
         "render_format": "library",
         "msg": msg,
     });
-    match build_context_response(&state, &env, &data, &papers, context) {
+    match build_context_response(&state, &env, &data, &papers, context, "library.html") {
         Ok(resp) => resp.into_response(),
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err).into_response(),
     }
@@ -2422,6 +2424,7 @@ fn build_context_response(
     data: &ServeData,
     papers: &[Value],
     extra: Value,
+    template_name: &str,
 ) -> Result<Html<String>, String> {
     let (conn, user_id) = load_context_db(state)?;
     let mut extra_map = HashMap::new();
@@ -2431,7 +2434,7 @@ fn build_context_response(
         }
     }
     let ctx = default_context(data, papers, &conn, user_id, &state.config, extra_map);
-    let template = env.get_template("main.html").map_err(|e| e.to_string())?;
+    let template = env.get_template(template_name).map_err(|e| e.to_string())?;
     let rendered = template.render(&ctx).map_err(|e| e.to_string())?;
     Ok(Html(rendered))
 }
