@@ -226,10 +226,6 @@ h1 {
 :root { --icon-color: #111; }
 [data-theme="dark"] { --icon-color: #f2f2f2; }
 
-.theme-toggle-btn {
-    color: var(--icon-color);
-}
-
 .theme-icon svg circle {
     fill: currentColor;
     stroke: none;
@@ -419,31 +415,6 @@ html.dark-mode .theme-icon {
     border-color: #4b5563;
 }
 
-.tag-list.collapsed .tag.tag-extra {
-    display: none;
-}
-
-.tag-list.expanded .tag.tag-extra {
-    display: inline-flex;
-}
-
-.tag-toggle {
-    margin-top: 0.35rem;
-    background: transparent;
-    border: 1px dashed #4b5563;
-    color: #e5e7eb;
-    padding: 0.3rem 0.75rem;
-    border-radius: 999px;
-    cursor: pointer;
-    font-size: 0.8rem;
-    transition: all 0.2s ease;
-}
-
-.tag-toggle:hover {
-    border-color: #9ca3af;
-    color: #f9fafb;
-}
-
 /* FILTER ACTIONS */
 .filter-actions {
     margin-top: 0.5rem;
@@ -540,7 +511,7 @@ html.dark-mode .theme-icon {
     flex-wrap: wrap;
 }
 
-.sort-control, .order-control {
+.sort-control {
     flex: 1;
     min-width: 0;
 }
@@ -851,7 +822,6 @@ html.dark-mode .cit {
 }
 
 /* Base style of the score pill */
-.news-popularity,
 .paper-popularity {
     padding: 0.15rem 0.55rem;
     border-radius: 999px;
@@ -1264,35 +1234,6 @@ html.dark-mode .paperdivider {
     color: #cbd5f5;
     font-size: 0.92rem;
 }
-.settings-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-}
-
-.settings-checkbox-list {
-    align-items: stretch;
-}
-
-.settings-checkbox-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    padding: 0.25rem 0.6rem;
-    border-radius: 999px;
-    border: 1px solid rgba(148, 163, 184, 0.3);
-    background: #1f2937;
-    color: #e2e8f0;
-    font-size: 0.8rem;
-}
-
-.settings-checkbox-item input[type="checkbox"] {
-    accent-color: #38bdf8;
-}
-
-.settings-checkbox-item input[type="checkbox"]:disabled {
-    opacity: 0.7;
-}
 
 .settings-topic-picker {
     display: flex;
@@ -1382,15 +1323,6 @@ html.dark-mode .paperdivider {
     box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.4);
 }
 
-.settings-chip-status {
-    background: rgba(56, 189, 248, 0.2);
-    color: #38bdf8;
-    padding: 0.1rem 0.35rem;
-    border-radius: 999px;
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-}
 
 .settings-button {
     margin-left: 0.5rem;
