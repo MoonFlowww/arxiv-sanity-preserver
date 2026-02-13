@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+
+{% block main_content %}
+<section class="info-page">
+    <h2>About this project</h2>
+    <p>
+        This project is a Rust-powered evolution of Andrej Karpathy's original
+        <strong>arxiv-sanity-preserver</strong>, focused on helping you track and prioritize research papers.
+    </p>
+
+    <h3>What this project is</h3>
+    <ul>
+        <li>A paper discovery interface for recent arXiv categories (for example: cs.CV, cs.CL, cs.LG, cs.AI, cs.NE, stat.ML).</li>
+        <li>A personal research workflow tool with search, filtering, recommendations, and a saved library.</li>
+        <li>A local-first app that can run on your own machine or server.</li>
+    </ul>
+
+    <h3>What was modified vs. Karpathy's original version</h3>
+    <ul>
+        <li>Backend rewritten in Rust (Axum), replacing the original Flask/Python server flow.</li>
+        <li>Modernized UI and layout with updated toolbar, filtering panels, theme toggle, and settings modal.</li>
+        <li>Pipeline integration for ingest, recompute status, and operational controls in the interface.</li>
+        <li>Improved topic-based download settings and richer metadata display in settings.</li>
+    </ul>
+
+    <h3>How the project works (high level)</h3>
+    <ol>
+        <li><strong>Ingest:</strong> paper metadata is downloaded and normalized into local storage/database.</li>
+        <li><strong>Index:</strong> text features are generated and a nearest-neighbor index is built.</li>
+        <li><strong>Serve:</strong> the web server loads cache/index/database and renders the browsing UI.</li>
+        <li><strong>Interact:</strong> users search, filter by topics, save papers, and view recommendations.</li>
+    </ol>
+
+    <h3>APIs and endpoints</h3>
+    <p>Examples of app endpoints include:</p>
+    <ul>
+        <li><code>/</code> — home/recent papers</li>
+        <li><code>/library</code> — saved papers</li>
+        <li><code>/search</code> — query and filter results</li>
+        <li><code>/topics</code>, <code>/top</code>, <code>/recommend</code> — discovery/recommendation views</li>
+        <li><code>/ingest</code>, <code>/ingest/status/:job_id</code>, <code>/recompute/status</code> — pipeline operations</li>
+        <li><code>/settings/download</code> and <code>/settings/download/run</code> — topic download settings and execution</li>
+    </ul>
+
+    <h3>Database and similarity</h3>
+    <ul>
+        <li>The app persists core user and library data in a local SQLite database (<code>.pipeline/as.db</code>).</li>
+        <li>Search and recommendation data are loaded from local cached artifacts and indexes.</li>
+        <li>Similarity/recommendation relies on vector/text features and nearest-neighbor retrieval for related papers.</li>
+    </ul>
+</section>
+{% endblock %}

@@ -136,6 +136,27 @@ h1 {
     color: #f9fafb;
 }
 
+.header-nav {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.8rem;
+    flex-wrap: wrap;
+}
+
+.header-nav-btn {
+    border: 1px solid #374151;
+    background: rgba(17, 24, 39, 0.6);
+    color: #f9fafb;
+    padding: 0.35rem 0.7rem;
+    border-radius: 0.4rem;
+    font-size: 0.85rem;
+    text-decoration: none;
+    transition: background 0.2s;
+}
+
+.header-nav-btn:hover {
+    background: #1f2937;
+}
 .header-actions {
     position: absolute;
     top: 1rem;
@@ -1846,6 +1867,13 @@ html.dark-mode ul.flashes li {
         padding: 1rem;
     }
 
+    .header-actions {
+        position: static;
+        margin-top: 0.75rem;
+        justify-content: flex-end;
+    }
+
+
     #maindiv {
         padding: 0.75rem;
     }
@@ -1870,4 +1898,37 @@ html.dark-mode ul.flashes li {
         padding: 0.5rem 0.75rem;
         font-size: 0.85rem;
     }
+}
+
+.info-page {
+    max-width: 900px;
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 0.6rem;
+    padding: 1rem 1.2rem;
+    line-height: 1.6;
+}
+
+.info-page h2,
+.info-page h3 {
+    margin-top: 0.6rem;
+}
+
+.info-page pre {
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 0.8rem;
+    border-radius: 0.4rem;
+    overflow-x: auto;
+}
+
+html.dark-mode .info-page {
+    background: #0f172a;
+    border-color: #1f2937;
+    color: #e5e7eb;
+}
+
+html.dark-mode .info-page pre {
+    background: #020617;
+    color: #e2e8f0;
 }

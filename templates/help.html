@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+
+{% block main_content %}
+<section class="info-page">
+    <h2>Help</h2>
+    <p>Useful commands for running, clearing, and debugging this project.</p>
+
+    <h3>Run</h3>
+    <pre><code># run the web server (default port 5000)
+cargo run -- serve
+
+# run on a custom port
+cargo run -- serve --port 5001
+
+# run in production mode flag
+cargo run -- serve --prod</code></pre>
+
+    <h3>Build & checks</h3>
+    <pre><code># format rust files
+cargo fmt
+
+# lint
+cargo clippy -- -D warnings
+
+# tests
+cargo test</code></pre>
+
+    <h3>Clear / reset local pipeline artifacts</h3>
+    <pre><code># remove generated pipeline data (be careful: destructive)
+rm -rf .pipeline
+
+# recreate state by re-running ingest/serve workflow afterwards
+cargo run -- serve</code></pre>
+
+    <h3>Debugging tips</h3>
+    <ul>
+        <li>Check health endpoint: <code>curl -s http://localhost:5000/health</code></li>
+        <li>Use browser dev tools for UI issues (console/network tabs).</li>
+        <li>Watch server logs in terminal while triggering actions from the UI.</li>
+        <li>Verify required files exist under <code>.pipeline/</code> if pages are empty.</li>
+    </ul>
+</section>
+{% endblock %}

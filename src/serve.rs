@@ -359,6 +359,8 @@ pub async fn run_with_args(args: ServeArgs) -> Result<(), Box<dyn std::error::Er
         .route("/top", get(top))
         .route("/toptwtr", get(toptwtr))
         .route("/library", get(library))
+        .route("/about", get(about))
+        .route("/help", get(help))
         .route("/libtoggle", post(libtoggle))
         .route("/:request_pid", get(rank))
         .nest_service("/static/thumbs", ServeDir::new(config.thumbs_dir.clone()))
@@ -2132,7 +2134,33 @@ async fn library(
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err).into_response(),
     }
 }
+async fn about(
+    State((state, env)): State<(AppState, Arc<Environment<'static>>)>,
+) -> axum::response::Response {
+    let data = state.data.read().unwrap().clone();
+    let context = json!({
+        "render_format": "about",
+        "msg": "About this project",
+    });
+    match build_context_response(&state, &env, &data, &[], context, "about.html") {
+        Ok(resp) => resp.into_response(),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err).into_response(),
+    }
+}
 
+async fn help(
+    State((state, env)): State<(AppState, Arc<Environment<'static>>)>,
+) -> axum::response::Response {
+    let data = state.data.read().unwrap().clone();
+    let context = json!({
+        "render_format": "help",
+        "msg": "Help and operational commands",
+    });
+    match build_context_response(&state, &env, &data, &[], context, "help.html") {
+        Ok(resp) => resp.into_response(),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err).into_response(),
+    }
+}
 async fn libtoggle(
     State((state, _env)): State<(AppState, Arc<Environment<'static>>)>,
     Form(form): Form<HashMap<String, String>>,
