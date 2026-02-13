@@ -126,11 +126,16 @@ h1 {
 
 .header-main-row {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 0.75rem;
+    align-items: center;
+    gap: 1rem;
 }
 
+.site-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-decoration: none;
+    color: inherit;
+}
 .site-subtitle {
     font-size: 0.9rem;
     opacity: 0.8;
@@ -167,6 +172,8 @@ h1 {
     display: flex;
     align-items: center;
     gap: 0.65rem;
+    flex: 0 0 auto;
+    margin-left: auto;
     z-index: 2;
 }
 
@@ -235,26 +242,6 @@ html:not(.dark-mode) .theme-icon {
 html.dark-mode .theme-icon {
     color: #fde68a;
 }
-
-/* USER INFO */
-#userinfo {
-    position: static;
-    color: white;
-    font-size: 14px;
-}
-
-#userinfo a {
-    border: 1px solid #374151;
-    padding: 0.4rem 0.6rem;
-    border-radius: 0.4rem;
-    margin-left: 0.5rem;
-    transition: background 0.2s;
-}
-
-#userinfo a:hover {
-    background: #1f2937;
-}
-
 .input-no-border {
     border: 1px solid #374151;
     padding: 0.4rem 0.5rem;
@@ -695,11 +682,6 @@ html.dark-mode .theme-icon {
 }
 
 /* SEARCH BOX */
-#sbox {
-    background: #111827;
-    padding: 1.5rem;
-    border-bottom: 1px solid #1f2937;
-}
 
 #qfield {
     width: 100%;
@@ -724,99 +706,6 @@ html.dark-mode .theme-icon {
     outline-offset: 0;
 }
 
-#search_hint {
-    text-align: center;
-    margin-top: 10px;
-    font-size: 14px;
-    color: #9ca3af;
-}
-
-#search_hint a {
-    margin-right: 10px;
-    color: #9ca3af;
-}
-
-/* PAGE BAR (TABS) */
-#pagebar {
-    background: #1f2937;
-    padding: 0;
-    display: flex;
-    border-bottom: 2px solid #374151;
-    overflow-x: auto;
-}
-
-.pagelink {
-    display: inline-block;
-    padding: 0.75rem 1.25rem;
-    font-size: 0.9rem;
-    border-right: 1px solid #374151;
-    background-color: #1f2937;
-    transition: background 0.2s;
-    white-space: nowrap;
-}
-
-.pagelink:hover {
-    background-color: #374151;
-}
-
-.tab-selected {
-    background-color: #111827 !important;
-    border-bottom: 2px solid #2563eb;
-}
-
-#pagebar a:link, #pagebar a:visited, #pagebar a:hover, #pagebar a:active {
-    text-decoration: none;
-    color: #e5e7eb;
-}
-
-/* TIME CHOICE */
-.centerdiv {
-    background: #1f2937;
-    padding: 0.75rem 1.5rem;
-    border-bottom: 1px solid #374151;
-}
-
-#recommend-time-choice {
-    background-color: transparent;
-    text-align: left;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    align-items: center;
-}
-
-#recommend-time-choice a:link, #recommend-time-choice a:visited,
-#recommend-time-choice a:hover, #recommend-time-choice a:active {
-    text-decoration: none;
-    color: #e5e7eb;
-}
-
-.timechoice, .vchoice {
-    display: inline-block;
-    background-color: #374151;
-    padding: 0.4rem 0.8rem;
-    border-radius: 0.4rem;
-    font-size: 0.85rem;
-    transition: background 0.2s;
-}
-
-.timechoice:hover, .vchoice:hover {
-    background-color: #4b5563;
-}
-
-.timechoice-selected {
-    background-color: #2563eb !important;
-}
-
-.vchoice-selected {
-    background-color: #16a34a !important;
-}
-
-.fdivider {
-    display: inline-block;
-    color: #6b7280;
-    margin: 0 0.5rem;
-}
 
 /* MAIN CONTENT */
 #maindiv {
@@ -1059,32 +948,6 @@ html.dark-mode .paperdivider {
     background-color: #1e293b;
     border-left-color: #6366f1;
     color: #e2e8f0;
-}
-
-/* FLASHES */
-#flashesdiv {
-    max-width: 1400px;
-    margin: 1rem auto;
-    padding: 0 1rem;
-    font-size: 16px;
-}
-
-ul.flashes {
-    list-style: none;
-    padding: 0;
-}
-
-ul.flashes li {
-    background: #fef3c7;
-    border: 1px solid #f59e0b;
-    border-radius: 0.5rem;
-    padding: 1rem;
-    margin-bottom: 0.5rem;
-}
-html.dark-mode ul.flashes li {
-    background: #3b2f1f;
-    border-color: #f59e0b;
-    color: #fef3c7;
 }
 
 /* BANNER */
@@ -1859,10 +1722,6 @@ html.dark-mode ul.flashes li {
         padding: 1rem;
     }
 
-    #userinfo {
-        margin-top: 1rem;
-        text-align: center;
-    }
 }
 
 @media (max-width: 768px) {
@@ -1872,6 +1731,7 @@ html.dark-mode ul.flashes li {
     .header-main-row {
         flex-direction: column;
         align-items: stretch;
+        gap: 0.75rem;
     }
     .header-actions {
         justify-content: flex-end;
@@ -1898,10 +1758,6 @@ html.dark-mode ul.flashes li {
         padding: 1rem;
     }
 
-    .pagelink {
-        padding: 0.5rem 0.75rem;
-        font-size: 0.85rem;
-    }
 }
 
 .info-page {
