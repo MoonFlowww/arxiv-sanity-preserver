@@ -239,6 +239,21 @@ fn maybe_convert(
     write_json_pretty(output_path, &payload)?;
     Ok(())
 }
+pub fn run_migrate_analysis(args: &MigrateAnalysisArgs) -> Result<(), String> {
+    maybe_convert(
+        "tfidf_meta",
+        &args.tfidf_meta_in,
+        &args.tfidf_meta_out,
+        args.allow_missing,
+    )?;
+    maybe_convert(
+        "user_sim",
+        &args.user_sim_in,
+        &args.user_sim_out,
+        args.allow_missing,
+    )?;
+    Ok(())
+}
 
 pub fn run_backfill_db_metadata(args: &BackfillDbMetadataArgs) -> Result<(), String> {
     let input = fs::read_to_string(&args.db_path)
