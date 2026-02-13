@@ -25,10 +25,10 @@ use stop_words::{get, LANGUAGE};
 use wait_timeout::ChildExt;
 
 use arxiv_sanity_pipeline::cache;
+use arxiv_sanity_pipeline::db::Database;
 use arxiv_sanity_pipeline::utils;
 use crate::hnsw_index::HnswIndex;
 
-mod db;
 mod download;
 mod hnsw_index;
 mod ingest;
@@ -1128,7 +1128,7 @@ fn run_buildsvm(config: &PipelineConfig) -> Result<(), String> {
         ));
     }
 
-    let db = db::Database::open(db_path)?;
+    let db = Database::open(db_path)?;
 
     let meta_contents = fs::read_to_string(&config.tfidf_meta_path)
         .map_err(|err| format!("Failed to read {}: {err}", config.tfidf_meta_path))?;

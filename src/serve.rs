@@ -34,7 +34,6 @@ const SINGLE_USER_ID: i64 = 1;
 const RECOMPUTE_STALE_SECONDS: i64 = 30 * 60;
 const DEFAULT_PIPELINE_DIR: &str = ".pipeline";
 const SIMILAR_RESULTS: usize = 50;
-const SETTINGS_KEY_SHOW_PROMPT: &str = "show_prompt";
 fn pipeline_path(entry: &str) -> PathBuf {
     Path::new(DEFAULT_PIPELINE_DIR).join(entry)
 }
@@ -75,12 +74,9 @@ struct ServeConfig {
     num_results: usize,
     port: u16,
     single_user_name: String,
-    db_path: PathBuf,
-    db_jsonl_path: PathBuf,
     pdf_dir: PathBuf,
     txt_dir: PathBuf,
     thumbs_dir: PathBuf,
-    tfidf_path: PathBuf,
     meta_path: PathBuf,
     tfidf_meta_json_path: PathBuf,
     hnsw_index_path: PathBuf,
@@ -90,7 +86,6 @@ struct ServeConfig {
     serve_cache_path: PathBuf,
     database_path: PathBuf,
     ingest_jobs_dir: PathBuf,
-    tmp_dir: PathBuf,
     download_settings_path: PathBuf,
     ui_settings_path: PathBuf,
 }
@@ -102,12 +97,9 @@ impl ServeConfig {
             port: args.port,
             single_user_name: std::env::var("ASP_SINGLE_USER_NAME")
                 .unwrap_or_else(|_| "localuser".to_string()),
-            db_path: pipeline_path("db.p"),
-            db_jsonl_path: pipeline_path("db.jsonl"),
             pdf_dir: pipeline_path("pdf"),
             txt_dir: pipeline_path("txt"),
             thumbs_dir: pipeline_path("thumb"),
-            tfidf_path: pipeline_path("tfidf.p"),
             meta_path: pipeline_path("tfidf_meta.p"),
             tfidf_meta_json_path: pipeline_path("tfidf_meta.json"),
             hnsw_index_path: pipeline_path("hnsw_index.bin"),
@@ -117,7 +109,6 @@ impl ServeConfig {
             serve_cache_path: pipeline_path("serve_cache.p"),
             database_path: pipeline_path("as.db"),
             ingest_jobs_dir: pipeline_path("ingest_jobs"),
-            tmp_dir: pipeline_path("tmp"),
             download_settings_path: pipeline_path("download_settings.json"),
             ui_settings_path: pipeline_path("ui_settings.json"),
         }
@@ -241,11 +232,6 @@ struct AppState {
     ingest_jobs: Arc<Mutex<HashMap<String, IngestJob>>>,
     recompute_status: Arc<Mutex<Option<RecomputeStatus>>>,
     recompute_thread: Arc<Mutex<Option<thread::JoinHandle<()>>>>,
-}
-
-pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let args = ServeArgs::parse();
-    run_with_args(args).await
 }
 
 fn filename_from_value(value: &MiniValue) -> Option<String> {
@@ -1750,13 +1736,6 @@ fn default_context(
     ans
 }
 
-fn library_count(conn: &Connection, user_id: i64) -> Result<i64, rusqlite::Error> {
-    conn.query_row(
-        "select count(*) from library where user_id = ?",
-        [user_id],
-        |row| row.get(0),
-    )
-}
 
 fn connect_db(path: &Path) -> Result<Connection, rusqlite::Error> {
     Connection::open(path)

@@ -227,19 +227,19 @@ impl CacheConfig {
             .unwrap_or_else(|| DEFAULT_OUTPUT_DIR.to_string());
         let db_jsonl_path = config_file.db_path.unwrap_or_else(|| {
             Path::new(&output_dir)
-                .join("db.jsonl")
+                .join(Path::new(DEFAULT_DB_JSONL_PATH).file_name().unwrap())
                 .to_string_lossy()
                 .to_string()
         });
         let tfidf_meta_json_path = config_file.tfidf_meta_path.unwrap_or_else(|| {
             Path::new(&output_dir)
-                .join("tfidf_meta.json")
+                .join(Path::new(DEFAULT_TFIDF_META_JSON_PATH).file_name().unwrap())
                 .to_string_lossy()
                 .to_string()
         });
         let database_path = config_file.database_path.unwrap_or_else(|| {
             Path::new(&output_dir)
-                .join("as.db")
+                .join(Path::new(DEFAULT_DATABASE_PATH).file_name().unwrap())
                 .to_string_lossy()
                 .to_string()
         });
