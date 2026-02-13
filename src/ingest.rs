@@ -6,10 +6,11 @@ use crate::hnsw_index::HnswIndex;
 
 use crate::download;
 use crate::{
-    ensure_command_exists, fetch_openalex_metadata, load_db_jsonl, parse_arxiv_url, read_bincode,
-    render_thumbnail_for_pdf, run_analyze, run_buildsvm, run_pdftotext_for_file, utils,
-    vectorize_document_text, write_bincode, write_db_jsonl, IngestSinglePaperArgs, Paper,
-    PipelineConfig, TfidfMatrix, TfidfMeta,
+    ensure_command_exists, extract_arxiv_entry_metadata, fetch_openalex_metadata, load_db_jsonl,
+    parse_arxiv_entry_metadata_map, parse_arxiv_url, read_bincode, render_thumbnail_for_pdf,
+    run_analyze, run_buildsvm, run_pdftotext_for_file, utils, vectorize_document_text,
+    write_bincode, write_db_jsonl, IngestSinglePaperArgs, Paper, PipelineConfig, TfidfMatrix,
+    TfidfMeta,
 };
 
 fn fetch_paper_metadata(paper_id: &str) -> Result<Paper, String> {
@@ -24,6 +25,8 @@ fn fetch_paper_metadata(paper_id: &str) -> Result<Paper, String> {
         .map_err(|err| format!("Failed to query arXiv: {err}"))?
         .bytes()
         .map_err(|err| format!("Failed to read response bytes: {err}"))?;
+    let atom_xml = String::from_utf8_lossy(&response).to_string();
+    let metadata_map = parse_arxiv_entry_metadata_map(&atom_xml);
     let feed =
         parser::parse(&response[..]).map_err(|err| format!("Failed to parse Atom feed: {err}"))?;
     let entry = feed
@@ -49,6 +52,11 @@ fn fetch_paper_metadata(paper_id: &str) -> Result<Paper, String> {
         .map(|author| author.name.clone())
         .collect::<Vec<_>>();
     let updated = entry.updated.map(|dt| dt.to_string()).unwrap_or_default();
+    let (published, arxiv_comment, num_pages) = extract_arxiv_entry_metadata(
+        &raw_id,
+        entry.published.map(|dt| dt.to_string()),
+        &metadata_map,
+    );
     let categories = entry
         .categories
         .iter()
@@ -62,7 +70,10 @@ fn fetch_paper_metadata(paper_id: &str) -> Result<Paper, String> {
         authors,
         abstract_text,
         updated,
+        published,
         time_published: None,
+        arxiv_comment,
+        num_pages,
         categories,
         citation_count: openalex_metadata.citation_count,
         is_accepted: openalex_metadata.is_accepted,

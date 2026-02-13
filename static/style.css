@@ -469,7 +469,9 @@ html.dark-mode .theme-icon {
     border-radius: 0.75rem;
     background: #0b1224;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-    position: sticky;
+    position: fixed;
+    left: 1rem;
+    right: 1rem;
     bottom: 1rem;
 }
 

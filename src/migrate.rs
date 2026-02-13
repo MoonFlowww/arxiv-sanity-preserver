@@ -7,7 +7,10 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
-use crate::{parse_arxiv_url, utils, MigrateAnalysisArgs, MigrateDbArgs, Paper};
+use crate::{
+    parse_arxiv_url, parse_num_pages_from_metadata, utils, BackfillDbMetadataArgs,
+    MigrateAnalysisArgs, MigrateDbArgs, Paper,
+};
 
 fn read_pickle(path: &Path) -> Result<PickleValue, String> {
     let bytes = fs::read(path).map_err(|err| format!("Failed to read {path:?}: {err}"))?;
@@ -69,12 +72,9 @@ fn pickle_to_json(value: PickleValue) -> Value {
         PickleValue::List(values) | PickleValue::Tuple(values) => {
             Value::Array(values.into_iter().map(pickle_to_json).collect())
         }
-        PickleValue::Set(values) | PickleValue::FrozenSet(values) => Value::Array(
-            values
-                .into_iter()
-                .map(hashable_to_json)
-                .collect(),
-        ),
+        PickleValue::Set(values) | PickleValue::FrozenSet(values) => {
+            Value::Array(values.into_iter().map(hashable_to_json).collect())
+        }
         PickleValue::Dict(entries) => {
             let mut map = Map::new();
             for (key, value) in entries {
@@ -90,14 +90,28 @@ fn write_json_pretty(path: &Path, payload: &Value) -> Result<(), String> {
         .map_err(|err| format!("Failed to serialize JSON {path:?}: {err}"))?;
     utils::ensure_parent_dir(path)?;
     utils::write_atomic(path, |file| {
-        writeln!(file, "{json}")
-            .map_err(|err| format!("Failed to write JSON {path:?}: {err}"))
+        writeln!(file, "{json}").map_err(|err| format!("Failed to write JSON {path:?}: {err}"))
     })
 }
 
 fn load_pickle_json(path: &Path) -> Result<Value, String> {
     let value = read_pickle(path)?;
     Ok(pickle_to_json(value))
+}
+fn value_to_i32(value: &Value) -> Option<i32> {
+    value.as_i64().and_then(|v| i32::try_from(v).ok())
+}
+
+fn write_jsonl_papers(path: &Path, papers: &[Paper]) -> Result<(), String> {
+    utils::ensure_parent_dir(path)?;
+    utils::write_atomic(path, |file| {
+        for paper in papers {
+            let line = serde_json::to_string(paper)
+                .map_err(|err| format!("Failed to serialize paper: {err}"))?;
+            writeln!(file, "{line}").map_err(|err| format!("Failed to write JSONL line: {err}"))?;
+        }
+        Ok(())
+    })
 }
 
 pub fn run_migrate_db(args: &MigrateDbArgs) -> Result<(), String> {
@@ -162,6 +176,22 @@ pub fn run_migrate_db(args: &MigrateDbArgs) -> Result<(), String> {
                     .collect::<Vec<String>>()
             })
             .unwrap_or_default();
+        let published = entry
+            .get("published")
+            .and_then(|value| value.as_str())
+            .map(str::to_string);
+        let arxiv_comment = entry
+            .get("arxiv_comment")
+            .or_else(|| entry.get("comment"))
+            .and_then(|value| value.as_str())
+            .map(str::to_string);
+        let journal_ref = entry
+            .get("journal_ref")
+            .and_then(|value| value.as_str())
+            .map(str::to_string);
+        let num_pages = entry.get("num_pages").and_then(value_to_i32).or_else(|| {
+            parse_num_pages_from_metadata(arxiv_comment.as_deref(), journal_ref.as_deref())
+        });
 
         papers.push(Paper {
             id: raw_id,
@@ -170,7 +200,10 @@ pub fn run_migrate_db(args: &MigrateDbArgs) -> Result<(), String> {
             authors,
             abstract_text,
             updated,
+            published,
             time_published: None,
+            arxiv_comment,
+            num_pages,
             categories,
             citation_count: None,
             is_accepted: None,
@@ -178,16 +211,7 @@ pub fn run_migrate_db(args: &MigrateDbArgs) -> Result<(), String> {
         });
     }
 
-    utils::ensure_parent_dir(&args.output)?;
-    utils::write_atomic(&args.output, |file| {
-        for paper in papers.iter() {
-            let line = serde_json::to_string(paper)
-                .map_err(|err| format!("Failed to serialize paper: {err}"))?;
-            writeln!(file, "{line}")
-                .map_err(|err| format!("Failed to write JSONL line: {err}"))?;
-        }
-        Ok(())
-    })?;
+    write_jsonl_papers(&args.output, &papers)?;
 
     println!("Wrote {} papers to {}", papers.len(), args.output.display());
     Ok(())
@@ -216,18 +240,38 @@ fn maybe_convert(
     Ok(())
 }
 
-pub fn run_migrate_analysis(args: &MigrateAnalysisArgs) -> Result<(), String> {
-    maybe_convert(
-        "tfidf_meta",
-        &args.tfidf_meta_in,
-        &args.tfidf_meta_out,
-        args.allow_missing,
-    )?;
-    maybe_convert(
-        "user_sim",
-        &args.user_sim_in,
-        &args.user_sim_out,
-        args.allow_missing,
-    )?;
+pub fn run_backfill_db_metadata(args: &BackfillDbMetadataArgs) -> Result<(), String> {
+    let input = fs::read_to_string(&args.db_path)
+        .map_err(|err| format!("Failed to read {}: {err}", args.db_path.display()))?;
+
+    let mut papers = Vec::new();
+    let mut updated_count = 0usize;
+    for (line_no, line) in input.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let mut paper: Paper = serde_json::from_str(line)
+            .map_err(|err| format!("Failed to parse JSONL line {}: {err}", line_no + 1))?;
+        let mut changed = false;
+        if paper.published.is_none() {
+            paper.published = Some(paper.updated.clone());
+            changed = true;
+        }
+        if paper.num_pages.is_none() {
+            paper.num_pages = parse_num_pages_from_metadata(paper.arxiv_comment.as_deref(), None);
+            changed |= paper.num_pages.is_some();
+        }
+        if changed {
+            updated_count += 1;
+        }
+        papers.push(paper);
+    }
+
+    write_jsonl_papers(&args.db_path, &papers)?;
+    println!(
+        "Backfilled {} papers in {}",
+        updated_count,
+        args.db_path.display()
+    );
     Ok(())
 }
