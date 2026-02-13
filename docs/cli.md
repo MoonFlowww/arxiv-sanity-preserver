@@ -17,7 +17,7 @@ The pipeline is composed of subcommands that can be run independently or via the
 *  `analyze` — Build TF-IDF vectors + HNSW similarity index.
 * `buildsvm` — Train per-user SVM recommendations.
 * `make-cache` — Build server cache artifacts.
-* `ingest-single-paper` — End-to-end ingest for a single paper.
+* `ingest-single-paper` — End-to-end ingest for one paper or a semicolon-separated list of paper IDs.
 * `migrate-analysis` — Convert legacy analysis pickles into JSON artifacts.
 * `migrate-db` — Convert `db.p` pickle into `db.jsonl`.
 * `serve` — Run the Axum server.
@@ -25,6 +25,12 @@ The pipeline is composed of subcommands that can be run independently or via the
 * `run-all` — Run the full pipeline in sequence.
 
 For the exhaustive flag reference (defaults + descriptions), see [`CLI_FLAGS.md`](../CLI_FLAGS.md).
+
+Example:
+
+```bash
+arxiv_sanity_pipeline ingest-single-paper "1112.1120; 2602.06031"
+```
 
 ## External dependencies
 

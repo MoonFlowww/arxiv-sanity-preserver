@@ -73,9 +73,9 @@ arxiv_sanity_pipeline buildsvm
 arxiv_sanity_pipeline make-cache
 ```
 
-### Ingest a single paper
+### Ingest one or more papers via ID
 ```bash
-arxiv_sanity_pipeline ingest-single-paper 1512.08756v2
+arxiv_sanity_pipeline ingest-single-paper "1112.1120; 2602.06031"
 ```
 
 By default this refreshes the TF‑IDF vectors, HNSW index, and caches. Use `--no-recompute` to skip cache rebuild.

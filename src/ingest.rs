@@ -2,15 +2,15 @@ use feed_rs::parser;
 use reqwest::blocking::Client;
 use std::fs;
 use std::path::{Path, PathBuf};
+use crate::hnsw_index::HnswIndex;
 
 use crate::download;
 use crate::{
     ensure_command_exists, fetch_openalex_metadata, load_db_jsonl, parse_arxiv_url, read_bincode,
-    run_analyze, run_buildsvm, run_pdftotext_for_file, render_thumbnail_for_pdf, utils,
+    render_thumbnail_for_pdf, run_analyze, run_buildsvm, run_pdftotext_for_file, utils,
     vectorize_document_text, write_bincode, write_db_jsonl, IngestSinglePaperArgs, Paper,
     PipelineConfig, TfidfMatrix, TfidfMeta,
 };
-use crate::hnsw_index::HnswIndex;
 
 fn fetch_paper_metadata(paper_id: &str) -> Result<Paper, String> {
     let base_url = "http://export.arxiv.org/api/query?id_list=";
@@ -24,8 +24,8 @@ fn fetch_paper_metadata(paper_id: &str) -> Result<Paper, String> {
         .map_err(|err| format!("Failed to query arXiv: {err}"))?
         .bytes()
         .map_err(|err| format!("Failed to read response bytes: {err}"))?;
-    let feed = parser::parse(&response[..])
-        .map_err(|err| format!("Failed to parse Atom feed: {err}"))?;
+    let feed =
+        parser::parse(&response[..]).map_err(|err| format!("Failed to parse Atom feed: {err}"))?;
     let entry = feed
         .entries
         .into_iter()
@@ -98,7 +98,11 @@ fn ensure_text_for_pdf(pdf_path: &Path, txt_dir: &Path) -> Result<PathBuf, Strin
     Ok(txt_path)
 }
 
-fn ensure_thumbnail_for_pdf(pdf_path: &Path, thumb_dir: &Path, tmp_dir: &Path) -> Result<(), String> {
+fn ensure_thumbnail_for_pdf(
+    pdf_path: &Path,
+    thumb_dir: &Path,
+    tmp_dir: &Path,
+) -> Result<(), String> {
     if !thumb_dir.exists() {
         fs::create_dir_all(thumb_dir)
             .map_err(|err| format!("Failed to create thumb dir {thumb_dir:?}: {err}"))?;
@@ -125,8 +129,8 @@ fn update_incremental_tfidf(
         .map_err(|err| format!("Failed to parse tfidf meta: {err}"))?;
     let mut tfidf: TfidfMatrix = read_bincode(Path::new(&config.tfidf_path))?;
 
-    let text =
-        fs::read_to_string(txt_path).map_err(|err| format!("Failed to read {txt_path:?}: {err}"))?;
+    let text = fs::read_to_string(txt_path)
+        .map_err(|err| format!("Failed to read {txt_path:?}: {err}"))?;
     let vector = vectorize_document_text(&text, &meta);
     let pid = format!("{}v{}", paper.id, paper.version);
 
@@ -194,19 +198,26 @@ fn update_incremental_tfidf(
     Ok(())
 }
 
-pub fn run_ingest_single_paper(
+fn parse_and_validate_ingest_ids(raw_input: &str) -> Result<Vec<String>, String> {
+    let paper_ids = utils::parse_arxiv_id_list(raw_input);
+    if paper_ids.is_empty() {
+        return Err("paper_id is required for ingest-single-paper".to_string());
+    }
+    if let Some(invalid_token) = paper_ids
+        .iter()
+        .find(|paper_id| !utils::is_valid_id(paper_id))
+    {
+        return Err(format!("{invalid_token} is not a valid arXiv identifier"));
+    }
+    Ok(paper_ids)
+}
+
+fn ingest_single_paper_id(
+    paper_id: &str,
     args: &IngestSinglePaperArgs,
     config: &PipelineConfig,
     config_path: &Path,
 ) -> Result<(), String> {
-    let paper_id = args
-        .paper_id
-        .as_deref()
-        .ok_or_else(|| "paper_id is required for ingest-single-paper".to_string())?;
-    if !utils::is_valid_id(paper_id) {
-        return Err(format!("{paper_id} is not a valid arXiv identifier"));
-    }
-
     println!("Fetching arXiv metadata for {paper_id}");
     let paper = fetch_paper_metadata(paper_id)?;
     let mut db = load_db_jsonl(Path::new(&config.db_path))?;
@@ -255,4 +266,65 @@ pub fn run_ingest_single_paper(
     }
 
     Ok(())
+}
+
+pub fn run_ingest_single_paper(
+    args: &IngestSinglePaperArgs,
+    config: &PipelineConfig,
+    config_path: &Path,
+) -> Result<(), String> {
+    let paper_id_input = args
+        .paper_id
+        .as_deref()
+        .ok_or_else(|| "paper_id is required for ingest-single-paper".to_string())?;
+    let paper_ids = parse_and_validate_ingest_ids(paper_id_input)?;
+
+    for (index, paper_id) in paper_ids.iter().enumerate() {
+        if paper_ids.len() > 1 {
+            println!(
+                "[{}/{}] Starting ingest for {}",
+                index + 1,
+                paper_ids.len(),
+                paper_id
+            );
+        }
+        ingest_single_paper_id(paper_id, args, config, config_path)?;
+        if paper_ids.len() > 1 {
+            println!(
+                "[{}/{}] Finished ingest for {}",
+                index + 1,
+                paper_ids.len(),
+                paper_id
+            );
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_and_validate_ingest_ids;
+
+    #[test]
+    fn parse_and_validate_ingest_ids_rejects_invalid_token() {
+        let err = parse_and_validate_ingest_ids("1112.1120; not-an-id")
+            .expect_err("invalid ID should return a validation error");
+        assert_eq!(err, "not-an-id is not a valid arXiv identifier");
+    }
+
+    #[test]
+    fn parse_and_validate_ingest_ids_splits_multi_input() {
+        let ids = parse_and_validate_ingest_ids("1112.1120; 2602.06031")
+            .expect("multi-ID input should parse as multiple valid IDs");
+        assert_eq!(ids, vec!["1112.1120", "2602.06031"]);
+    }
+
+    #[test]
+    fn parse_and_validate_ingest_ids_does_not_validate_raw_unsplit_string() {
+        let raw = "1112.1120; 2602.06031";
+        assert!(!crate::utils::is_valid_id(raw));
+        let ids = parse_and_validate_ingest_ids(raw)
+            .expect("semicolon-separated IDs should be parsed and validated individually");
+        assert_eq!(ids.len(), 2);
+    }
 }

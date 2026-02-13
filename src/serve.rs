@@ -2839,12 +2839,19 @@ fn run_recompute_job(state: &AppState) {
 }
 
 fn run_ingest_job(state: &AppState, job_id: &str, paper_id: &str) {
+    let parsed_paper_ids = utils::parse_arxiv_id_list(paper_id);
+    let total_papers = parsed_paper_ids.len();
+    let start_message = if total_papers > 1 {
+        format!("Starting ingest for {total_papers} papers")
+    } else {
+        "Starting ingest".to_string()
+    };
     update_ingest_job(
         state,
         job_id,
         "Starting ingest...",
         1,
-        Some("Starting ingest".to_string()),
+        Some(start_message),
         false,
         false,
         false,

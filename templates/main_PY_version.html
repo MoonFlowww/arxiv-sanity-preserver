@@ -1,0 +1,1013 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>Arxiv Sanity Preserver</title>
+
+    <!-- MathJax -->
+    <script type="text/x-mathjax-config">
+        MathJax.Hub.Config({tex2jax: {inlineMath: [['$','$'], ['\\(','\\)']]}});
+    </script>
+    <script type="text/javascript" async
+            src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS_CHTML">
+    </script>
+
+    <!-- CSS -->
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css') }}">
+
+    <!-- Favicon -->
+    <link rel="shortcut icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}"/>
+
+    <!-- JS -->
+    <script src="{{ url_for('static', filename='jquery-1.8.3.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='d3.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='as-common.js') }}"></script>
+
+    <!-- Google Analytics JS -->
+    <script>
+        (function (i, s, o, g, r, a, m) {
+            i['GoogleAnalyticsObject'] = r;
+            i[r] = i[r] || function () {
+                (i[r].q = i[r].q || []).push(arguments)
+            }, i[r].l = 1 * new Date();
+            a = s.createElement(o),
+                m = s.getElementsByTagName(o)[0];
+            a.async = 1;
+            a.src = g;
+            m.parentNode.insertBefore(a, m)
+        })(window, document, 'script', 'https://www.google-analytics.com/analytics.js', 'ga');
+
+        ga('create', 'UA-3698471-25', 'auto');
+        ga('send', 'pageview');
+
+    </script>
+    <script>
+        var themePreference = null;
+        function getStoredTheme() {
+            try {
+                return localStorage.getItem('theme');
+            } catch (error) {
+                return themePreference;
+            }
+        }
+        function setStoredTheme(value) {
+            themePreference = value;
+            try {
+                localStorage.setItem('theme', value);
+            } catch (error) {
+                // ignore storage errors
+            }
+        }
+        (function () {
+            var storedTheme = getStoredTheme();
+            if (!storedTheme) {
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                storedTheme = prefersDark ? 'dark' : 'light';
+            }
+            if (storedTheme === 'dark') {
+                document.documentElement.classList.add('dark-mode');
+            }
+        })();
+
+        function initThemeToggle() {
+            var toggleButton = document.querySelector('.theme-toggle');
+            if (!toggleButton) {
+                return;
+            }
+            var setLabel = function () {
+                var isDark = document.documentElement.classList.contains('dark-mode');
+                toggleButton.innerHTML = isDark
+                    ? '<span class="theme-icon" aria-hidden="true">꥟</span>'
+                    : '<span class="theme-icon" aria-hidden="true">🌙</span>';
+                toggleButton.setAttribute('aria-pressed', isDark ? 'true' : 'false');
+                toggleButton.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+                updateSettingsPanelValues();
+            };
+            setLabel();
+            toggleButton.addEventListener('click', function () {
+                document.documentElement.classList.toggle('dark-mode');
+                var isDark = document.documentElement.classList.contains('dark-mode');
+                setStoredTheme(isDark ? 'dark' : 'light');
+                setLabel();
+            });
+        }
+        function updateSettingsPanelValues() {
+            var layoutValue = document.getElementById('settings-layout-value');
+            var themeValue = document.getElementById('settings-theme-value');
+            var endDateValue = document.getElementById('settings-end-date');
+            var todayButton = document.getElementById('settings-today-button');
+
+            if (layoutValue) {
+                var storedLayout = null;
+                try {
+                    storedLayout = localStorage.getItem('preferredLayout');
+                } catch (e) {
+                }
+                var layoutChoice = storedLayout;
+                if (!layoutChoice) {
+                    var rtable = document.getElementById('rtable');
+                    layoutChoice = rtable ? rtable.getAttribute('data-layout') : null;
+                }
+                layoutChoice = layoutChoice === 'single' ? 'single' : 'double';
+                layoutValue.textContent = layoutChoice === 'single' ? 'Single-column' : 'Two-column';
+            }
+
+            if (themeValue) {
+                var storedTheme = getStoredTheme();
+                if (!storedTheme) {
+                    themeValue.textContent = 'System';
+                } else {
+                    themeValue.textContent = storedTheme === 'dark' ? 'Dark' : 'Light';
+                }
+            }
+
+            if (todayButton && endDateValue && !todayButton.dataset.bound) {
+                todayButton.addEventListener('click', function () {
+                    var today = new Date();
+                    var formatted = today.toISOString().slice(0, 10);
+                    endDateValue.textContent = formatted;
+                });
+                todayButton.dataset.bound = 'true';
+            }
+        }
+        function initSettingsModal() {
+            var openButton = document.querySelector('.settings-toggle');
+            var overlay = document.getElementById('settings-overlay');
+            if (!openButton || !overlay) {
+                return;
+            }
+            var closeButton = overlay.querySelector('.settings-close');
+            var tabButtons = overlay.querySelectorAll('.settings-tab');
+            var tabPanels = overlay.querySelectorAll('.settings-panel');
+
+            var showOverlay = function () {
+                overlay.classList.add('visible');
+                overlay.setAttribute('aria-hidden', 'false');
+                if (tabButtons.length) {
+                    try {
+                        tabButtons[0].focus({ preventScroll: true });
+                    } catch (error) {
+                        tabButtons[0].focus();
+                    }
+                }
+            };
+
+            var hideOverlay = function () {
+                overlay.classList.remove('visible');
+                overlay.setAttribute('aria-hidden', 'true');
+                openButton.focus();
+                if (window.resetSettingsTopicSearch) {
+                    window.resetSettingsTopicSearch();
+                }
+            };
+
+            var setActiveTab = function (targetId) {
+                tabButtons.forEach(function (button) {
+                    var isActive = button.getAttribute('data-tab') === targetId;
+                    button.classList.toggle('active', isActive);
+                    button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                });
+                tabPanels.forEach(function (panel) {
+                    var isActive = panel.id === targetId;
+                    panel.classList.toggle('active', isActive);
+                    panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+                });
+            };
+
+            openButton.addEventListener('click', function (event) {
+                event.preventDefault();
+                showOverlay();
+            });
+            closeButton.addEventListener('click', hideOverlay);
+            overlay.addEventListener('click', function (event) {
+                if (event.target === overlay) {
+                    hideOverlay();
+                }
+            });
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape' && overlay.classList.contains('visible')) {
+                    hideOverlay();
+                }
+            });
+
+            tabButtons.forEach(function (button) {
+                button.addEventListener('click', function () {
+                    setActiveTab(button.getAttribute('data-tab'));
+                });
+            });
+
+            if (tabButtons.length) {
+                setActiveTab(tabButtons[0].getAttribute('data-tab'));
+            }
+        }
+        function initDownloadSettingsPanel() {
+            var topicContainer = document.getElementById('settings-topic-tags');
+            if (!topicContainer) {
+                return;
+            }
+            var topicInputs = topicContainer.querySelectorAll('input[type="checkbox"]');
+            var rows = document.querySelectorAll('.settings-download-row');
+            var selectedContainer = document.getElementById('settings-selected-topics');
+            var updateRows = function () {
+                rows.forEach(function (row) {
+                    var topicValue = row.getAttribute('data-topic');
+                    var input = topicContainer.querySelector('input[value="' + topicValue + '"]');
+                    var isChecked = input ? input.checked : false;
+                    row.classList.toggle('is-hidden', !isChecked);
+                });
+            };
+            var renderSelectedTopics = function () {
+                if (!selectedContainer) {
+                    return;
+                }
+                selectedContainer.innerHTML = '';
+                var selectedInputs = Array.prototype.filter.call(topicInputs, function (input) {
+                    return input.checked;
+                });
+                if (!selectedInputs.length) {
+                    var empty = document.createElement('span');
+                    empty.className = 'settings-topic-empty';
+                    empty.textContent = 'No topics selected';
+                    selectedContainer.appendChild(empty);
+                    return;
+                }
+                selectedInputs.forEach(function (input) {
+                    var label = input.closest('label');
+                    var labelSpan = label ? label.querySelector('span') : null;
+                    var chip = document.createElement('span');
+                    chip.className = 'settings-chip selected';
+                    chip.textContent = labelSpan ? labelSpan.textContent : input.value;
+                    selectedContainer.appendChild(chip);
+                });
+            };
+            topicInputs.forEach(function (input) {
+                input.addEventListener('change', function () {
+                    updateRows();
+                    renderSelectedTopics();
+                });
+            });
+            updateRows();
+            renderSelectedTopics();
+
+            var saveButton = document.querySelector('.settings-save-button');
+            if (saveButton && !saveButton.dataset.bound) {
+                saveButton.addEventListener('click', function () {
+                    var original = saveButton.getAttribute('data-label') || saveButton.textContent;
+                    saveButton.setAttribute('data-label', original);
+                    saveButton.textContent = 'Saved';
+                    saveButton.classList.add('saved');
+                    setTimeout(function () {
+                        saveButton.textContent = original;
+                        saveButton.classList.remove('saved');
+                    }, 1500);
+                });
+                saveButton.dataset.bound = 'true';
+            }
+        }
+    </script>
+
+    <script>
+
+        // passed in from flask as json
+        var tweets = {{tweets | tojson }};
+
+        var papers = {{ papers | tojson }};
+
+        var msg = "{{ msg }}";
+        var render_format = "{{ render_format }}";
+        var numresults = "{{ numresults }}";
+        var show_prompt = "{{ show_prompt }}";
+
+        var urlq = ''; // global will be read in to QueryString when load is done
+
+        var ingestPoller = null;
+        var ingestLogIndex = 0;
+        var ingestJobId = null;
+        var recomputePoller = null;
+        var recomputeLastStatus = null;
+        function resetIngestState() {
+            $('#ingest-status-text').text('Preparing to start the ingest process...');
+            $('#ingest-progress-bar').css('width', '0%');
+            $('.ingest-progress').attr('aria-valuenow', 0);
+            $('#ingest-log').empty();
+            ingestLogIndex = 0;
+            updateIngestButtonProgress('Preparing to start the ingest process...', 0);
+        }
+
+        function updateIngestButtonProgress(label, percent) {
+            $('#ingest-button-label').text(label);
+            $('#ingest-button-progress').css('width', percent + '%');
+        }
+
+        function setIngestButtonBusy(isBusy) {
+            var button = $('.ingest-submit');
+            button.toggleClass('is-busy', isBusy);
+            button.attr('aria-busy', isBusy ? 'true' : 'false');
+            button.find('.btn-progress').attr('aria-hidden', isBusy ? 'false' : 'true');
+            if (!isBusy) {
+                updateIngestButtonProgress('Preparing to start the ingest process...', 0);
+            }
+        }
+
+        function updateIngestProgress(step) {
+            var status = $('#ingest-status-text');
+            var bar = $('#ingest-progress-bar');
+            var progressShell = $('.ingest-progress');
+
+            status.text(step.label);
+            bar.css('width', step.percent + '%');
+            progressShell.attr('aria-valuenow', step.percent);
+            updateIngestButtonProgress(step.label, step.percent);
+        }
+
+        function showIngestOverlay() {
+            $('#ingest-overlay').attr('aria-hidden', 'false').addClass('visible');
+        }
+
+        function hideIngestOverlay() {
+            $('#ingest-overlay').attr('aria-hidden', 'true').removeClass('visible');
+        }
+
+        function pollIngestStatus(jobId) {
+            ingestPoller = setInterval(function () {
+                $.getJSON('/ingest/status/' + jobId, function (data) {
+                    updateIngestProgress({label: data.label, percent: data.percent});
+                    if (data.messages && data.messages.length > ingestLogIndex) {
+                        var log = $('#ingest-log');
+                        for (var i = ingestLogIndex; i < data.messages.length; i++) {
+                            var line = $('<div></div>').text(data.messages[i]);
+                            log.append(line);
+                        }
+                        ingestLogIndex = data.messages.length;
+                        log.scrollTop(log[0].scrollHeight);
+                    }
+
+                    if (data.done) {
+                        clearInterval(ingestPoller);
+                        ingestPoller = null;
+                        ingestJobId = null;
+                        setIngestButtonBusy(false);
+                        if (data.error) {
+                            $('#ingest-status-text').text('Ingest failed');
+                        }
+                    }
+                }).fail(function () {
+                    clearInterval(ingestPoller);
+                    ingestPoller = null;
+                    ingestJobId = null;
+                    setIngestButtonBusy(false);
+                });
+            }, 1000);
+        }
+        function showRecomputePanel(message, percent, level) {
+            var panel = $('#recompute-status-panel');
+            var text = $('#recompute-status-text');
+            var progress = $('#recompute-status-percent');
+            var levelClass = level ? 'recompute-' + level : '';
+            var percentText = '—';
+
+            text.text(message);
+            if (typeof percent === 'number') {
+                percentText = percent + '%';
+            } else if (typeof percent === 'string' && percent.trim()) {
+                percentText = percent;
+            }
+            progress.text(percentText);
+            panel.removeClass('recompute-error recompute-info recompute-success');
+            if (levelClass) {
+                panel.addClass(levelClass);
+            }
+            panel.attr('aria-hidden', 'false').addClass('visible');
+        }
+
+        function hideRecomputePanel() {
+            $('#recompute-status-panel').attr('aria-hidden', 'true').removeClass('visible');
+        }
+
+
+        function updateRecomputeStatus(state) {
+            var status = state.status || 'idle';
+            recomputeLastStatus = status;
+            var isActive = status === 'running' || status === 'queued';
+            var percent = state.percent;
+            var message = state.message || (status === 'queued' ? 'Recompute queued...' : 'Recomputing caches...');
+
+            if (isActive) {
+                showRecomputePanel(message, percent, 'info');
+            } else {
+                hideRecomputePanel();
+                updateRecomputeBadge(status === 'finished');
+            }
+        }
+
+        function fetchRecomputeStatus() {
+            $.getJSON('/recompute/status', function (data) {
+                updateRecomputeStatus(data);
+            });
+        }
+
+        function startRecomputePolling() {
+            if (!recomputePoller) {
+                recomputePoller = setInterval(fetchRecomputeStatus, 2000);
+            }
+            fetchRecomputeStatus();
+        }
+
+
+        // when page loads...
+        $(document).ready(function () {
+
+            urlq = QueryString.q;
+
+            // display message, if any
+            if (msg !== '') {
+                d3.select("#rtable").append('div').classed('msg', true).html(msg);
+            }
+
+            // add papers to #rtable
+            var done = addPapers(10, false);
+            if (done) {
+                $("#loadmorebtn").hide();
+            }
+
+            // set up inifinite scrolling for adding more papers
+            $(window).on('scroll', function () {
+                var scrollTop = $(document).scrollTop();
+                var windowHeight = $(window).height();
+                var bodyHeight = $(document).height() - windowHeight;
+                var scrollPercentage = (scrollTop / bodyHeight);
+                if (scrollPercentage > 0.9) {
+                    var done = addPapers(5, true);
+                    if (done) {
+                        $("#loadmorebtn").hide();
+                    }
+                }
+            });
+
+            // just in case scrolling is broken somehow, provide a button handler explicit
+            $("#loadmorebtn").on('click', function () {
+                var done = addPapers(5, true);
+                if (done) {
+                    $("#loadmorebtn").hide();
+                }
+            });
+
+            if (papers.length === 0) {
+                $("#loadmorebtn").hide();
+            }
+
+            if (!(typeof urlq == 'undefined')) {
+                d3.select("#qfield").attr('value', urlq.replace(/\+/g, " "));
+            }
+
+            var xb = $("#xbanner");
+            if (xb.length !== 0) {
+                xb.click(function () {
+                    $("#banner").slideUp('fast');
+                })
+            }
+
+            $("#goaway").on('click', function () {
+                $("#prompt").slideUp('fast');
+                $.post("/goaway", {}).done(function (data) {
+                });
+            });
+
+            var topicSearch = $("#topic-search");
+            var topicTags = $("#topic-tags");
+            var settingsTopicSearch = $("#settings-topic-search");
+            var settingsTopicList = $(".settings-topic-list");
+
+            if (topicTags.length && topicSearch.length) {
+                var tags = topicTags.find('.tag');
+
+                topicSearch.on('input', function () {
+                    var query = $(this).val().toLowerCase().trim();
+
+                    if (query === '') {
+                        tags.show();
+                        topicTags.addClass('limited');
+                    } else {
+                        tags.each(function () {
+                            var text = $(this).text().toLowerCase();
+                            $(this).toggle(text.indexOf(query) !== -1);
+                        });
+                        topicTags.addClass('limited');
+                    }
+                });
+            }
+            if (settingsTopicSearch.length && settingsTopicList.length) {
+                var settingsTags = settingsTopicList.find('.tag');
+                var resetSettingsTopicSearch = function () {
+                    settingsTopicSearch.val('');
+                    settingsTags.show();
+                    settingsTopicList.addClass('limited');
+                };
+
+                settingsTopicSearch.on('input', function () {
+                    var query = $(this).val().toLowerCase().trim();
+
+                    if (query === '') {
+                        settingsTags.show();
+                        settingsTopicList.addClass('limited');
+                    } else {
+                        settingsTags.each(function () {
+                            var text = $(this).text().toLowerCase();
+                            $(this).toggle(text.indexOf(query) !== -1);
+                        });
+                        settingsTopicList.addClass('limited');
+                    }
+                });
+
+                window.resetSettingsTopicSearch = resetSettingsTopicSearch;
+            }
+
+            var filterForm = $('.filter-form');
+            if (filterForm.length) {
+                filterForm.on('reset', function () {
+                    setTimeout(function () {
+                        if (topicSearch.length && topicTags.length) {
+                            topicSearch.val('');
+                            topicTags.find('.tag').show();
+                            topicTags.addClass('limited');
+                        }
+                    }, 0);
+                });
+            }
+
+            var ingestForm = $('#ingest-form');
+            if (ingestForm.length) {
+                ingestForm.on('submit', function (event) {
+                    event.preventDefault();
+                    if (ingestJobId && ingestPoller) {
+                        showIngestOverlay();
+                        return;
+                    }
+                    resetIngestState();
+                    showIngestOverlay();
+                    setIngestButtonBusy(true);
+
+                    $.post('/ingest', ingestForm.serialize(), function (data) {
+                        if (data.error) {
+                            $('#ingest-status-text').text(data.error);
+                            setIngestButtonBusy(false);
+                            ingestJobId = null;
+                            return;
+                        }
+                        if (data.job_id) {
+                            ingestJobId = data.job_id;
+                            pollIngestStatus(ingestJobId);
+                        }
+                    }, 'json').fail(function () {
+                        $('#ingest-status-text').text('Could not start ingest. Please try again.');
+                        setIngestButtonBusy(false);
+                        ingestJobId = null;
+                    });
+                });
+            }
+            startRecomputePolling();
+
+            initLayoutToggle('.layout-btn');
+            initThemeToggle();
+            initSettingsModal();
+            initDownloadSettingsPanel();
+            updateSettingsPanelValues();
+            $('.layout-btn').on('click', updateSettingsPanelValues);
+            $('#ingest-overlay').on('click', function (event) {
+                if (event.target === this) {
+                    hideIngestOverlay();
+                }
+            });
+        });
+
+    </script>
+</head>
+
+<body>
+
+<!-- HEADER -->
+<div id="titdiv">
+    <!-- Site information/banner -->
+    <div class="header-actions">
+        <button type="button" class="settings-toggle" aria-haspopup="dialog">
+            Settings
+        </button>
+        <button type="button" class="theme-toggle" aria-label="Switch to dark mode" aria-pressed="false">
+            <span class="theme-icon" aria-hidden="true">🌙</span>
+        </button>
+    </div>
+    <a href="/">
+        <div id="tittxt">
+            <h1>Arxiv Sanity Preserver</h1>
+            <div class="site-subtitle">
+                Modified from Karpathy's version with updated UI & backend.<br>
+                Serving last {{ totpapers }} papers from cs.[CV|CL|LG|AI|NE]/stat.M
+            </div>
+        </div>
+    </a>
+</div>
+
+<!-- FLASHES -->
+{% with flashes = get_flashed_messages() %}
+{% if flashes %}
+<div id="flashesdiv">
+    <ul class="flashes">
+        {% for message in flashes %}
+        <li>{{ message }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+{% endwith %}
+
+<!-- MAIN LAYOUT: SIDEBAR + CONTENT -->
+<div class="layout-container">
+
+    <!-- SIDEBAR: FILTERS -->
+    <aside class="filter-panel">
+        <h2>Filters</h2>
+        <form class="filter-form" method="get" action="/search">
+
+            <!-- SEARCH BAR -->
+            <div class="filter-group">
+                <label for="qfield">Search</label>
+                <input name="q" type="search" id="qfield" placeholder="Keywords..." value="{{ search_query }}">
+            </div>
+
+            <!-- TOPICS (Multi-select tags) -->
+
+            {% set sorted_topics = topics|sort(attribute='count', reverse=True) %}
+            {% set selected_sorted = sorted_topics|selectattr('name', 'in', selected_topics)|list %}
+            {% set unselected_sorted = sorted_topics|rejectattr('name', 'in', selected_topics)|list %}
+            {% set display_topics = selected_sorted + unselected_sorted %}
+            {% set max_label_length = 18 %}
+            <div class="filter-group">
+                <label>Topics</label>
+                <div class="topic-cluster">
+                    <input
+                            type="search"
+                            id="topic-search"
+                            class="topic-search"
+                            placeholder="Search topics..."
+                            autocomplete="off"
+                    />
+                    <div class="tag-list limited" id="topic-tags">
+                        {% for topic in display_topics %}
+                        {% set full_name = topic.display_name %}
+                        {% if full_name|length > max_label_length %}
+                        {% set truncated_candidate = full_name[:max_label_length] %}
+                        {% set trimmed = truncated_candidate.rsplit(' ', 1)[0] %}
+                        {% set truncated_name = (trimmed if trimmed else truncated_candidate).rstrip() ~ '...' %}
+                        {% else %}
+                        {% set truncated_name = full_name %}
+                        {% endif %}
+                        <label class="tag">
+                            <input
+                                    type="checkbox"
+                                    name="topics[]"
+                                    value="{{ topic.name }}"
+                                    {% if topic.name in selected_topics %}checked{% endif %}
+                            />
+                            <span data-full-name="{{ full_name }}" title="{{ full_name }}">{{ truncated_name }} ({{ topic.count }})</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- SCORE FILTER -->
+            <div class="filter-group">
+                <label for="scorebar">Minimum Score</label>
+                <input
+                        id="scorebar"
+                        name="min_score"
+                        type="text"
+                        placeholder="e.g. 2.5"
+                        inputmode="decimal"
+                        pattern="[0-9]*[.]?[0-9]*"
+                        value="{{ min_score }}"
+                />
+            </div>
+
+            <!-- AVAILABILITY FILTERS -->
+            <div class="filter-group">
+                <label>Others</label>
+                <label class="checkbox">
+                    <input
+                            type="checkbox"
+                            name="open_source"
+                            value="1"
+                            {% if open_source %}checked{% endif %}
+                    />
+                    <span>Open-Source</span>
+                </label>
+                <label class="checkbox">
+                    <input
+                            type="checkbox"
+                            name="publication_status"
+                            value="presented"
+                            {% if 'presented' in publication_statuses %}checked{% endif %}
+                    />
+                    <span>Presented at conference</span>
+                </label>
+            </div>
+
+
+            <!-- SORT OPTIONS -->
+            <div class="sort-options">
+                <div class="sort-row">
+                    <div class="filter-group sort-control">
+                        <label for="sortby">Sort By</label>
+                        <div class="sort-control-row">
+                            <div class="select-wrapper sort-select">
+                                {% set sort_by_value = sort_by or 'date' %}
+                                <select id="sortby" name="sortby" class="select-input">
+                                    <option value="date" {% if sort_by_value==
+                                    'date' %}selected{% endif %}>Date</option>
+                                    <option value="score" {% if sort_by_value==
+                                    'score' %}selected{% endif %}>Score</option>
+                                    <option value="citation" {% if sort_by_value==
+                                    'citation' %}selected{% endif %}>Citation</option>
+                                </select>
+                            </div>
+                            {% set sort_order_value = sort_order or 'desc' %}
+                            <div class="order-toggle" id="sortorder">
+                                <label class="order-option">
+                                    <input type="radio" name="sortorder" value="desc" {% if sort_order_value== 'desc'
+                                    %}checked{% endif %}>
+                                    <span class="order-button order-desc">DESC</span>
+                                </label>
+                                <label class="order-option">
+                                    <input type="radio" name="sortorder" value="asc" {% if sort_order_value== 'asc'
+                                    %}checked{% endif %}>
+                                    <span class="order-button order-asc">ASC</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ACTIONS -->
+            <div class="filter-actions">
+                <button type="submit" class="btn-primary">Search</button>
+                <button type="reset" class="btn-secondary">Reset</button>
+            </div>
+        </form>
+
+        <div class="ingest-card">
+            <h3>Add Paper</h3>
+            <form id="ingest-form" class="ingest-form" method="post" action="/ingest">
+                <div class="filter-group">
+                    <label for="paper-id-input">arXiv identifier</label>
+                    <input
+                            id="paper-id-input"
+                            name="paper_id"
+                            type="text"
+                            placeholder="e.g. 1512.08756v2"
+                            required
+                    />
+                </div>
+                <p class="ingest-help">We will download the PDF, extract text, and refresh caches for the new paper.</p>
+                <button type="submit" class="btn-primary ingest-submit" aria-busy="false">
+                    <span class="btn-label">Add paper</span>
+                    <span class="btn-progress" aria-hidden="true">
+                        <span class="btn-progress-label" id="ingest-button-label">Preparing to start the ingest process...</span>
+                        <span class="btn-progress-track">
+                            <span class="btn-progress-bar" id="ingest-button-progress"></span>
+                        </span>
+                    </span>
+                </button>
+            </form>
+            <div class="recompute-status-panel" id="recompute-status-panel" aria-hidden="true">
+                <div class="recompute-status-content">
+                    <span id="recompute-status-text">Recomputing caches...</span>
+                    <span class="recompute-progress" id="recompute-status-percent">0%</span>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT: PAPERS -->
+    <main id="maindiv">
+        <div class="layout-toolbar">
+            <span class="layout-label">Layout</span>
+            <div class="layout-toggle" role="group" aria-label="Toggle paper layout">
+                <button
+                        type="button"
+                        class="layout-btn"
+                        data-layout="single"
+                        aria-label="Single column layout"
+                        title="Single column layout"
+                >
+                    ▢
+                </button>
+                <button type="button" class="layout-btn" data-layout="double" aria-label="Two-column layout"
+                        title="Two-column layout">
+                    <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                        <rect x="3" y="3" width="4" height="4" rx="0.6"></rect>
+                        <rect x="10" y="3" width="4" height="4" rx="0.6"></rect>
+                        <rect x="17" y="3" width="4" height="4" rx="0.6"></rect>
+
+                        <rect x="3" y="10" width="4" height="4" rx="0.6"></rect>
+                        <rect x="10" y="10" width="4" height="4" rx="0.6"></rect>
+                        <rect x="17" y="10" width="4" height="4" rx="0.6"></rect>
+
+                        <rect x="3" y="17" width="4" height="4" rx="0.6"></rect>
+                        <rect x="10" y="17" width="4" height="4" rx="0.6"></rect>
+                        <rect x="17" y="17" width="4" height="4" rx="0.6"></rect>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        {% if no_results_message %}
+        <div class="msg">{{ no_results_message }}</div>
+        {% endif %}
+
+        <div id="rtable" data-layout="double"></div>
+
+        <div id="loadmore">
+            <button id="loadmorebtn">Load more</button>
+        </div>
+    </main>
+</div>
+
+<div class="ingest-overlay" id="ingest-overlay" aria-hidden="true">
+    <div class="ingest-modal" role="dialog" aria-labelledby="ingest-modal-title" aria-describedby="ingest-status-text">
+        <h3 id="ingest-modal-title">Adding new paper</h3>
+        <p class="ingest-status" id="ingest-status-text">Preparing to start the ingest process...</p>
+        <div class="ingest-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="ingest-progress-bar" id="ingest-progress-bar" style="width: 0%;"></div>
+        </div>
+        <div class="ingest-log" id="ingest-log" aria-live="polite"></div>
+        <p class="ingest-note">We'll download the PDF, extract the text, and refresh caches. Feel free to keep this tab
+            open while we work.</p>
+    </div>
+</div>
+<div class="settings-overlay" id="settings-overlay" aria-hidden="true">
+    <div class="settings-modal" role="dialog" aria-labelledby="settings-title" aria-describedby="settings-description">
+        <div class="settings-header">
+            <h3 id="settings-title">Settings</h3>
+            <button type="button" class="settings-close" aria-label="Close settings">✕</button>
+        </div>
+        <p class="settings-description" id="settings-description">
+            Tune your experience. Changes are saved automatically on this device.
+        </p>
+        <div class="settings-tabs" role="tablist" aria-label="Settings tabs">
+            <button type="button" class="settings-tab" role="tab" data-tab="settings-general">General</button>
+            <button type="button" class="settings-tab" role="tab" data-tab="settings-download">Download</button>
+            <button type="button" class="settings-tab" role="tab" data-tab="settings-storage">Storage</button>
+            <button type="button" class="settings-tab" role="tab" data-tab="settings-stats">Stats</button>
+        </div>
+        <div class="settings-panels">
+            <section class="settings-panel" id="settings-general" role="tabpanel" aria-hidden="true">
+                <h4>General</h4>
+                <div class="settings-card">
+                    <p>Choose the defaults that appear when you open the site.</p>
+                    <div class="settings-row">
+                        <span>Default layout</span>
+                        <span class="settings-value" id="settings-layout-value">Two-column</span>
+                    </div>
+                    <div class="settings-row">
+                        <span>Theme</span>
+                        <span class="settings-value" id="settings-theme-value">System</span>
+                    </div>
+                </div>
+            </section>
+            <section class="settings-panel" id="settings-download" role="tabpanel" aria-hidden="true">
+                <h4>Download</h4>
+                <div class="settings-card">
+                    <p>Manage arXiv exports and download defaults.</p>
+                    <div class="settings-row">
+                        <span>Auto-download PDFs</span>
+                        <span class="settings-value">Manual (on ingest)</span>
+                    </div>
+                    <div class="settings-row">
+                        <span>Save location</span>
+                        <span class="settings-value">{{ settings_download_dir }}</span>
+                    </div>
+                    <div class="settings-row settings-row-stack">
+                        <span>arXiv databases</span>
+                        <div class="settings-topic-picker">
+                            <div class="settings-topic-section">
+                                <div class="settings-topic-section-title">Available topics</div>
+                                <div class="topic-cluster">
+                                    <input
+                                            type="search"
+                                            id="settings-topic-search"
+                                            class="topic-search"
+                                            placeholder="Search topics..."
+                                            autocomplete="off"
+                                    />
+                                    <div class="tag-list limited settings-topic-list" id="settings-topic-tags">
+                                        {% for topic in settings_download_topics %}
+                                        <label class="tag settings-topic-tag">
+                                            <input type="checkbox" name="download_topics[]" value="{{ topic.name }}" {% if topic.selected %}checked{% endif %}>
+                                            <span data-full-name="{{ topic.display_name }}" title="{{ topic.display_name }}">{{ topic.display_name }}</span>
+                                        </label>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="settings-topic-section">
+                                <div class="settings-topic-section-title">Selected topics</div>
+                                <div class="topic-cluster">
+                                    <div class="tag-list limited settings-selected-list" id="settings-selected-topics" aria-live="polite"></div>
+                                </div>
+                            </div>
+                            <button type="button" class="settings-button settings-save-button">Save selections</button>
+                        </div>
+                    </div>
+                    <div class="settings-row settings-row-stack">
+                        <span>Download parameters by topic</span>
+                        <div class="settings-table settings-table-scroll settings-download-table">
+                            <div class="settings-table-row settings-table-header">
+                                <span>Topic</span>
+                                <span>Papers owned</span>
+                                <span>Owned start</span>
+                                <span>Owned end</span>
+                                <span>Desired start</span>
+                                <span>Desired end</span>
+                                <span>Published</span>
+                            </div>
+                            {% for topic in settings_download_topics %}
+                            {% set topic_stats = settings_topic_stats | selectattr('display_name', 'equalto', topic.display_name) | list %}
+                            {% set topic_stat = topic_stats[0] if topic_stats else None %}
+                            <div class="settings-table-row settings-download-row" data-topic="{{ topic.name }}">
+                                <span>{{ topic.display_name }}</span>
+                                <span>{{ topic_stat.paper_count_display if topic_stat else '—' }}</span>
+                                <span>{{ settings_date_range.start }}</span>
+                                <span>{{ settings_date_range.end }}</span>
+                                <input class="settings-input" type="date" name="download_start_{{ topic.name }}">
+                                <input class="settings-input" type="date" name="download_end_{{ topic.name }}">
+                                <label class="settings-checkbox-inline">
+                                    <input type="checkbox" name="download_published_{{ topic.name }}">
+                                    <span>Published</span>
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <span>First paper date</span>
+                        <span class="settings-value">{{ settings_date_range.start }}</span>
+                    </div>
+                    <div class="settings-row">
+                        <span>Latest paper date</span>
+                        <span class="settings-value">
+                            <span id="settings-end-date">{{ settings_date_range.end }}</span>
+                            <button type="button" class="settings-button" id="settings-today-button">Today</button>
+                        </span>
+                    </div>
+                    <p class="settings-note">Dates define the paper download window for the next ingestion run.</p>
+                </div>
+            </section>
+            <section class="settings-panel" id="settings-storage" role="tabpanel" aria-hidden="true">
+                <h4>Storage</h4>
+                <div class="settings-card">
+                    <p>Review cached content and reclaim space.</p>
+                    <div class="settings-row">
+                        <span>Cached papers</span>
+                        <span class="settings-value">{{ "{:,}".format(settings_storage_papers) }} items</span>
+                    </div>
+                    <div class="settings-row">
+                        <span>Storage used</span>
+                        <span class="settings-value">{{ settings_storage_used }}</span>
+                    </div>
+                </div>
+            </section>
+            <section class="settings-panel" id="settings-stats" role="tabpanel" aria-hidden="true">
+                <h4>Stats</h4>
+                <div class="settings-card">
+                    <p>Category coverage across the database.</p>
+                    <div class="settings-row settings-row-stack">
+                        <span>Per-category metrics</span>
+                        <div class="settings-table settings-table-scroll">
+                            <div class="settings-table-row settings-table-header">
+                                <span>Category</span>
+                                <span>Papers</span>
+                                <span>Citations</span>
+                                <span>Avg score</span>
+                            </div>
+                            {% for row in settings_topic_stats %}
+                            <div class="settings-table-row">
+                                <span>{{ row.display_name }}</span>
+                                <span>{{ row.paper_count_display }}</span>
+                                <span>{{ row.citations_total_display }}</span>
+                                <span>{{ row.avg_score_display }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <p class="settings-note">Sorted by total papers. Scroll to see the full list beyond the first 10.</p>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+
+<br><br>
+</body>
+
+</html>
