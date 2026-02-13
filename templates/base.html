@@ -832,31 +832,33 @@
 
 <!-- HEADER -->
 <div id="titdiv">
-    <!-- Site information/banner -->
-    <div class="header-nav" aria-label="Primary">
-        <a class="header-nav-btn" href="/">Home</a>
-        <a class="header-nav-btn" href="/library">Library</a>
-        <a class="header-nav-btn" href="/about">About</a>
-        <a class="header-nav-btn" href="/help">Help</a>
-    </div>
-    <div class="header-actions">
-        <button type="button" class="settings-toggle" aria-haspopup="dialog">
-            Settings
-        </button>
-        <button type="button" class="theme-toggle" aria-label="Switch to dark mode" aria-pressed="false">
-            <span class="theme-icon" aria-hidden="true">🌙</span>
-        </button>
-    </div>
-    <a href="/">
-        <div id="tittxt">
-            <h1>Arxiv Sanity Preserver</h1>
-            <div class="site-subtitle">
-                Modified from Karpathy's version with updated UI & backend.<br>
-                Serving last {{ totpapers }} papers from cs.[CV|CL|LG|AI|NE]/stat.M
+    <div class="header-main-row">
+        <a class="site-title" href="/">
+            <div id="tittxt">
+                <h1>Arxiv Sanity Preserver</h1>
+                <div class="site-subtitle">
+                    Modified from Karpathy's version with updated UI & backend.<br>
+                    Serving last {{ totpapers }} papers from cs.[CV|CL|LG|AI|NE]/stat.M
+                </div>
             </div>
+        </a>
+
+        <nav class="header-nav" aria-label="Primary">
+            <a class="header-nav-btn" href="/">Home</a>
+            <a class="header-nav-btn" href="/library">Library</a>
+            <a class="header-nav-btn" href="/about">About</a>
+            <a class="header-nav-btn" href="/help">Help</a>
+        </nav>
+
+        <div class="header-actions">
+            <button type="button" class="settings-toggle" aria-haspopup="dialog">Settings</button>
+            <button type="button" class="theme-toggle" aria-label="Switch to dark mode" aria-pressed="false">
+                <span class="theme-icon" aria-hidden="true">🌙</span>
+            </button>
         </div>
-    </a>
+    </div>
 </div>
+
 
 <!-- MAIN LAYOUT: SIDEBAR + CONTENT -->
 <div class="layout-container">
