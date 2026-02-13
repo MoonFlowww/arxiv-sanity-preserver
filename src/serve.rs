@@ -354,6 +354,7 @@ pub async fn run_with_args(args: ServeArgs) -> Result<(), Box<dyn std::error::Er
         .route("/settings/download", post(update_download_settings))
         .route("/settings/download/run", post(run_download_with_settings))
         .route("/search", get(search))
+        .route("/api/papers/metrics", get(papers_metrics))
         .route("/topics", get(topics))
         .route("/recommend", get(recommend))
         .route("/top", get(top))
@@ -1935,6 +1936,135 @@ async fn search(
         Ok(resp) => resp.into_response(),
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err).into_response(),
     }
+}
+async fn papers_metrics(
+    State((state, _env)): State<(AppState, Arc<Environment<'static>>)>,
+    RawQuery(query): RawQuery,
+) -> impl IntoResponse {
+    let query_map = parse_query(query);
+    let q = query_map
+        .get("q")
+        .and_then(|vals| vals.first())
+        .cloned()
+        .unwrap_or_default();
+    let mut selected_topics: Vec<String> = Vec::new();
+    if let Some(list) = query_map.get("topics") {
+        selected_topics.extend(list.iter().cloned());
+    }
+    if let Some(list) = query_map.get("topics[]") {
+        selected_topics.extend(list.iter().cloned());
+    }
+    let min_score = query_map
+        .get("min_score")
+        .and_then(|vals| vals.first())
+        .cloned()
+        .or_else(|| {
+            query_map
+                .get("scorebar")
+                .and_then(|vals| vals.first())
+                .cloned()
+        })
+        .and_then(|v| v.parse::<f64>().ok());
+    let open_source_filter = query_map
+        .get("open_source")
+        .and_then(|vals| vals.first())
+        .map(|v| v == "1")
+        .unwrap_or(false);
+    let publication_statuses = query_map
+        .get("publication_status")
+        .cloned()
+        .unwrap_or_default();
+
+    let data = state.data.read().unwrap().clone();
+    let papers = papers_search(
+        &data,
+        &q,
+        &selected_topics,
+        min_score,
+        open_source_filter,
+        &publication_statuses,
+        None,
+        "desc",
+    );
+
+    let mut min_date: Option<NaiveDate> = None;
+    let mut max_date: Option<NaiveDate> = None;
+    for paper in &papers {
+        if let Some(ts) = paper.get("time_published").and_then(|v| v.as_i64()) {
+            if let Some(dt) = chrono::DateTime::from_timestamp(ts, 0) {
+                let date = dt.date_naive();
+                min_date = Some(min_date.map_or(date, |d| d.min(date)));
+                max_date = Some(max_date.map_or(date, |d| d.max(date)));
+            }
+        }
+    }
+
+    let span_days = if let (Some(start), Some(end)) = (min_date, max_date) {
+        (end - start).num_days()
+    } else {
+        0
+    };
+    let time_bin = if span_days > 180 { "month" } else { "week" };
+
+    let mut time_counts: HashMap<String, i64> = HashMap::new();
+    let mut page_counts: HashMap<i64, i64> = HashMap::new();
+    let mut pages_with_metadata = 0i64;
+    let mut note_with = 0i64;
+    let mut note_without = 0i64;
+
+    for paper in &papers {
+        if let Some(ts) = paper.get("time_published").and_then(|v| v.as_i64()) {
+            if let Some(dt) = chrono::DateTime::from_timestamp(ts, 0) {
+                let date = dt.date_naive();
+                let key = if time_bin == "month" {
+                    format!("{:04}-{:02}", date.year(), date.month())
+                } else {
+                    let iso = date.iso_week();
+                    format!("{:04}-W{:02}", iso.year(), iso.week())
+                };
+                *time_counts.entry(key).or_insert(0) += 1;
+            }
+        }
+
+        if let Some(num_pages) = paper.get("num_pages").and_then(|v| v.as_i64()) {
+            if num_pages > 0 {
+                *page_counts.entry(num_pages).or_insert(0) += 1;
+                pages_with_metadata += 1;
+            }
+        }
+
+        let has_note = paper
+            .get("arxiv_comment")
+            .and_then(|v| v.as_str())
+            .map(|v| !v.trim().is_empty())
+            .unwrap_or(false);
+        if has_note {
+            note_with += 1;
+        } else {
+            note_without += 1;
+        }
+    }
+
+    let mut time_series: Vec<(String, i64)> = time_counts.into_iter().collect();
+    time_series.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let mut page_histogram: Vec<(i64, i64)> = page_counts.into_iter().collect();
+    page_histogram.sort_by(|a, b| a.0.cmp(&b.0));
+
+    Json(json!({
+        "total": papers.len(),
+        "time_bin": time_bin,
+        "time_series": time_series.into_iter().map(|(bin, count)| json!({"bin": bin, "count": count})).collect::<Vec<Value>>(),
+        "page_histogram": page_histogram.into_iter().map(|(pages, count)| json!({"pages": pages, "count": count})).collect::<Vec<Value>>(),
+        "note_coverage": {
+            "with_note": note_with,
+            "without_note": note_without,
+        },
+        "metadata_coverage": {
+            "pages_with_metadata": pages_with_metadata,
+            "pages_missing_metadata": (papers.len() as i64 - pages_with_metadata).max(0),
+        }
+    }))
 }
 
 async fn topics(

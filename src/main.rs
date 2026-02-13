@@ -1330,7 +1330,24 @@ fn fetch_for_query(
     args: &FetchArgs,
     db: &mut HashMap<String, Paper>,
 ) -> Result<i32, String> {
-    let base_url = "http://export.arxiv.org/api/query?";
+    fn body_preview(body: &str, max_chars: usize) -> String {
+        body.chars().take(max_chars).collect::<String>()
+    }
+
+    fn looks_like_atom_xml(body: &str) -> bool {
+        let trimmed = body.trim_start_matches('\u{feff}').trim_start();
+        trimmed.starts_with("<?xml") || trimmed.starts_with("<feed")
+    }
+
+    fn content_type_is_xml(content_type: &str) -> bool {
+        let ct = content_type.to_ascii_lowercase();
+        ct.contains("application/atom+xml")
+            || ct.contains("application/xml")
+            || ct.contains("text/xml")
+            || ct.contains("+xml")
+    }
+
+    let base_url = "https://export.arxiv.org/api/query?";
     let max_fetch = max_results.unwrap_or(args.max_index);
     println!("Searching arXiv for {search_query}");
     println!("database has {} entries at start", db.len());
@@ -1346,11 +1363,41 @@ fn fetch_for_query(
         let response = client
             .get(format!("{base_url}{query}"))
             .send()
-            .map_err(|err| format!("Failed to query arXiv: {err}"))?
+            .map_err(|err| format!("Failed to query arXiv: {err}"))?;
+
+        let status = response.status();
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("<missing>")
+            .to_string();
+
+        let response = response
             .bytes()
             .map_err(|err| format!("Failed to read response bytes: {err}"))?;
 
         let atom_xml = String::from_utf8_lossy(&response).to_string();
+        if !status.is_success() {
+            return Err(format!(
+                "arXiv query failed with status {status} and content-type {content_type}; body preview: {}",
+                body_preview(&atom_xml, 300)
+            ));
+        }
+
+        if !looks_like_atom_xml(&atom_xml) {
+            return Err(format!(
+                "arXiv response is not Atom/XML (status {status}, content-type {content_type}); body preview: {}",
+                body_preview(&atom_xml, 300)
+            ));
+        }
+
+        if !content_type_is_xml(&content_type) {
+            return Err(format!(
+                "Unexpected arXiv content-type {content_type} for status {status}; body preview: {}",
+                body_preview(&atom_xml, 300)
+            ));
+        }
         let metadata_map = parse_arxiv_entry_metadata_map(&atom_xml);
 
         let feed = parser::parse(&response[..])
