@@ -5,6 +5,7 @@
 body {
     margin: 0;
     padding: 0;
+    padding-top: var(--header-offset);
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     background: #f3f4f6;
     color: #020617;
@@ -642,7 +643,7 @@ html.dark-mode .theme-icon {
 
 
 .order-button {
-    min-width: 4.6rem;
+    width: 4.6rem;
     justify-content: center;
     padding: 0.42rem 0.9rem;
     border-radius: 999px;
@@ -656,7 +657,7 @@ html.dark-mode .theme-icon {
     transition: all 0.2s ease;
 }
 
-order-button.is-asc {
+.order-button.is-asc {
     background: #16a34a;
     border-color: #16a34a;
     box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
@@ -730,7 +731,6 @@ order-button.is-asc {
     flex: 1;
     padding: 1.5rem 2rem;
     background-color: #f9fafb;
-    overflow-y: auto;
 }
 
 html.dark-mode #maindiv {
@@ -1509,7 +1509,6 @@ html.dark-mode .paperdivider {
 
         flex-direction: column;
         min-height: calc(100vh - var(--header-offset));
-        margin-top: var(--header-offset);
     }
 
     #rtable {
@@ -1564,7 +1563,6 @@ html.dark-mode .paperdivider {
     }
     .layout-container {
         min-height: calc(100vh - var(--header-offset));
-        margin-top: var(--header-offset);
     }
     .header-main-row {
         flex-direction: column;
