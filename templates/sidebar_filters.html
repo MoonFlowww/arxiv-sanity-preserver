@@ -1,5 +1,4 @@
 <aside class="filter-panel">
-    <h2>Filters</h2>
     <form class="filter-form" method="get" action="/search">
 
         <!-- SEARCH BAR -->
@@ -60,24 +59,26 @@
         <!-- AVAILABILITY FILTERS -->
         <div class="filter-group">
             <label>Others</label>
-            <label class="checkbox">
-                <input
-                        type="checkbox"
-                        name="open_source"
-                        value="1"
-                        {% if open_source %}checked{% endif %}
-                />
-                <span>Open-Source</span>
-            </label>
-            <label class="checkbox">
-                <input
-                        type="checkbox"
-                        name="publication_status"
-                        value="accepted_published"
-                        {% if 'accepted_published' in publication_statuses %}checked{% endif %}
-                />
-                <span>Accepted/Published</span>
-            </label>
+            <div class="availability-row">
+                <label class="checkbox">
+                    <input
+                            type="checkbox"
+                            name="open_source"
+                            value="1"
+                            {% if open_source %}checked{% endif %}
+                    />
+                    <span>Open-Source</span>
+                </label>
+                <label class="checkbox">
+                    <input
+                            type="checkbox"
+                            name="publication_status"
+                            value="accepted_published"
+                            {% if 'accepted_published' in publication_statuses %}checked{% endif %}
+                    />
+                    <span>Accepted/Published</span>
+                </label>
+            </div>
         </div>
 
 
@@ -99,17 +100,11 @@
                             </select>
                         </div>
                         {% set sort_order_value = sort_order or 'desc' %}
-                        <div class="order-toggle" id="sortorder">
-                            <label class="order-option">
-                                <input type="radio" name="sortorder" value="desc" {% if sort_order_value== 'desc'
-                                %}checked{% endif %}>
-                                <span class="order-button order-desc">DESC</span>
-                            </label>
-                            <label class="order-option">
-                                <input type="radio" name="sortorder" value="asc" {% if sort_order_value== 'asc'
-                                %}checked{% endif %}>
-                                <span class="order-button order-asc">ASC</span>
-                            </label>
+                        <div class="order-toggle" id="sortorder-toggle-wrap" data-sort-order="{{ sort_order_value }}">
+                            <input type="hidden" name="sortorder" id="sortorder" value="{{ sort_order_value }}">
+                            <button type="button" class="order-button {{ 'is-desc' if sort_order_value == 'desc' else 'is-asc' }}" id="sortorder-toggle" aria-label="Toggle sort order">
+                                {{ 'DESC' if sort_order_value == 'desc' else 'ASC' }}
+                            </button>
                         </div>
                     </div>
                 </div>

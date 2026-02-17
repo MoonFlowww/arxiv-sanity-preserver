@@ -769,12 +769,32 @@
 
             var filterForm = $('.filter-form');
             if (filterForm.length) {
+                var sortOrderToggle = $('#sortorder-toggle');
+                var sortOrderInput = $('#sortorder');
+                var setSortOrderState = function (order) {
+                    var normalizedOrder = order === 'asc' ? 'asc' : 'desc';
+                    sortOrderInput.val(normalizedOrder);
+                    sortOrderToggle.text(normalizedOrder.toUpperCase());
+                    sortOrderToggle.toggleClass('is-asc', normalizedOrder === 'asc');
+                    sortOrderToggle.toggleClass('is-desc', normalizedOrder === 'desc');
+                };
+
+                if (sortOrderToggle.length && sortOrderInput.length) {
+                    setSortOrderState(sortOrderInput.val());
+                    sortOrderToggle.on('click', function () {
+                        var nextOrder = sortOrderInput.val() === 'asc' ? 'desc' : 'asc';
+                        setSortOrderState(nextOrder);
+                    });
+                }
                 filterForm.on('reset', function () {
                     setTimeout(function () {
                         if (topicSearch.length && topicTags.length) {
                             topicSearch.val('');
                             topicTags.find('.tag').show();
                             topicTags.addClass('limited');
+                        }
+                        if (sortOrderToggle.length && sortOrderInput.length) {
+                            setSortOrderState('desc');
                         }
                     }, 0);
                 });
