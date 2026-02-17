@@ -422,19 +422,16 @@ html.dark-mode .theme-icon {
     gap: 0.5rem;
 }
 
-.ingest-card {
-    margin-top: 1rem;
-    padding: 1rem;
-    border: 1px solid #1f2937;
-    border-radius: 0.75rem;
-    background: #0b1224;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-    position: static;
+.sidebar-ingest {
+    margin-top: auto;
+    padding: 0.85rem 0 0;
+    border-top: 1px solid rgba(148, 163, 184, 0.24);
+    background: rgba(148, 163, 184, 0.05);
 }
 
-.ingest-card h3 {
+.sidebar-ingest h3 {
     margin: 0 0 0.5rem 0;
-    color: #e0f2fe;
+    color: #f9fafb;
 }
 
 
@@ -1456,6 +1453,14 @@ html.dark-mode .paperdivider {
         height: auto;
         max-height: none;
         z-index: 3;
+    }
+
+
+    .sidebar-ingest {
+        margin-top: 1rem;
+        padding: 0.75rem 0 0;
+        border-top: 1px solid rgba(148, 163, 184, 0.3);
+        background: rgba(148, 163, 184, 0.04);
     }
 
     #maindiv {
