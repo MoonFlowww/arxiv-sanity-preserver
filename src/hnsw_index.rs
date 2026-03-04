@@ -106,7 +106,10 @@ impl HnswIndex {
     pub fn find_neighbors(&self, pid: &str, k: usize) -> Option<Vec<String>> {
         let idx = self.resolve_pid(pid)?;
         let query = &self.vectors[idx];
-        let neighbors = self.hnsw.search(query, k.min(self.pids.len()), HNSW_EF_SEARCH);
+        let neighbors = self
+            .hnsw
+            .search(query, k.min(self.pids.len()), HNSW_EF_SEARCH);
+
         let mut out = Vec::new();
         for neighbor in neighbors {
             if let Some(pid) = self.pids.get(neighbor.d_id) {

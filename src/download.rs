@@ -222,7 +222,11 @@ pub fn run_download_pdfs(_args: &DownloadArgs, config: &PipelineConfig) -> Resul
 
         if !have.contains(&filename) {
             let pdf_url = build_pdf_url(paper);
-            println!("fetching {pdf_url} into {}", pdf_dir.join(&filename).display());
+            println!(
+                "fetching {pdf_url} into {}",
+                pdf_dir.join(&filename).display()
+            );
+
             match download_pdf_for_paper(&client, paper, pdf_dir) {
                 Ok(_) => {
                     have.insert(filename);
@@ -236,16 +240,17 @@ pub fn run_download_pdfs(_args: &DownloadArgs, config: &PipelineConfig) -> Resul
                 }
             }
         } else {
-            println!(
-                "{} exists, skipping",
-                pdf_dir.join(&filename).display()
-            );
+            println!("{} exists, skipping", pdf_dir.join(&filename).display());
             numok += 1;
         }
 
         println!("{numok}/{numtot} of {} downloaded ok.", db.len());
     }
 
-    println!("final number of papers downloaded okay: {numok}/{}", db.len());
+    println!(
+        "final number of papers downloaded okay: {numok}/{}",
+        db.len()
+    );
+
     Ok(())
 }

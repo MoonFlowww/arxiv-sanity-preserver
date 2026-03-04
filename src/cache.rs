@@ -1,3 +1,7 @@
+
+use crate::config::AppConfig;
+use crate::utils;
+
 use chrono::{DateTime, NaiveDateTime, Utc};
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -8,19 +12,11 @@ use serde_pickle::ser::SerOptions;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{BufRead, BufReader};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
-use crate::utils;
+
 
 const DEFAULT_CONFIG_PATH: &str = "pipeline_config.json";
-const DEFAULT_OUTPUT_DIR: &str = ".pipeline";
-const DEFAULT_DB_PICKLE_PATH: &str = ".pipeline/db.p";
-const DEFAULT_DB_JSONL_PATH: &str = ".pipeline/db.jsonl";
-const DEFAULT_TFIDF_META_PICKLE_PATH: &str = ".pipeline/tfidf_meta.p";
-const DEFAULT_TFIDF_META_JSON_PATH: &str = ".pipeline/tfidf_meta.json";
-const DEFAULT_DATABASE_PATH: &str = ".pipeline/as.db";
-const DEFAULT_SERVE_CACHE_PATH: &str = ".pipeline/serve_cache.p";
-const DEFAULT_DB_SERVE_PATH: &str = ".pipeline/db2.p";
 const SECONDS_PER_YEAR: f64 = 365.25 * 24.0 * 60.0 * 60.0;
 
 static PUNCTUATION: Lazy<HashSet<char>> = Lazy::new(|| {
@@ -31,30 +27,6 @@ static REPO_LINK_PATTERN: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(https?://(?:www\.)?(?:github\.com|gitlab\.com|bitbucket\.org|codeberg\.org|gitee\.com|git\.sr\.ht|dev\.azure\.com|[A-Za-z0-9-]+\.visualstudio\.com)/[^\s\])},;]+)")
         .expect("Failed to compile repo link regex")
 });
-
-#[derive(Debug, Deserialize)]
-struct CacheConfigFile {
-    #[serde(default)]
-    output_dir: Option<String>,
-    #[serde(default)]
-    db_path: Option<String>,
-    #[serde(default)]
-    tfidf_meta_path: Option<String>,
-    #[serde(default)]
-    database_path: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-struct CacheConfig {
-    db_pickle_path: PathBuf,
-    db_jsonl_path: PathBuf,
-    tfidf_meta_pickle_path: PathBuf,
-    tfidf_meta_json_path: PathBuf,
-    database_path: PathBuf,
-    serve_cache_path: PathBuf,
-    db_serve_path: PathBuf,
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 struct Author {
     name: String,
@@ -132,7 +104,7 @@ struct TfidfMetaF32 {
 }
 
 pub fn run_make_cache(config_path: &Path) -> Result<(), String> {
-    let config = CacheConfig::load(config_path)?;
+    let config = AppConfig::load(config_path)?;
     let mut db = load_paper_db(&config)?;
     let meta = load_tfidf_meta(&config)?;
 
@@ -157,7 +129,11 @@ pub fn run_make_cache(config_path: &Path) -> Result<(), String> {
         let ts = parse_timestamp(&paper.updated)?;
         times.push(ts as f64);
     }
-    let (ttmin, ttmax) = match (times.iter().cloned().reduce(f64::min), times.iter().cloned().reduce(f64::max)) {
+    let (ttmin, ttmax) = match (
+        times.iter().cloned().reduce(f64::min),
+        times.iter().cloned().reduce(f64::max),
+    ) {
+
         (Some(min), Some(max)) => (min, max),
         _ => (0.0, 0.0),
     };
@@ -207,73 +183,34 @@ pub fn run_make_cache(config_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-impl CacheConfig {
-    fn load(path: &Path) -> Result<Self, String> {
-        let config_file = if path.exists() {
-            let contents = fs::read_to_string(path)
-                .map_err(|err| format!("Failed to read config {path:?}: {err}"))?;
-            serde_json::from_str::<CacheConfigFile>(&contents)
-                .map_err(|err| format!("Failed to parse config {path:?}: {err}"))?
-        } else {
-            CacheConfigFile {
-                output_dir: None,
-                db_path: None,
-                tfidf_meta_path: None,
-                database_path: None,
-            }
-        };
-        let output_dir = config_file
-            .output_dir
-            .unwrap_or_else(|| DEFAULT_OUTPUT_DIR.to_string());
-        let db_jsonl_path = config_file.db_path.unwrap_or_else(|| {
-            Path::new(&output_dir)
-                .join(Path::new(DEFAULT_DB_JSONL_PATH).file_name().unwrap())
-                .to_string_lossy()
-                .to_string()
-        });
-        let tfidf_meta_json_path = config_file.tfidf_meta_path.unwrap_or_else(|| {
-            Path::new(&output_dir)
-                .join(Path::new(DEFAULT_TFIDF_META_JSON_PATH).file_name().unwrap())
-                .to_string_lossy()
-                .to_string()
-        });
-        let database_path = config_file.database_path.unwrap_or_else(|| {
-            Path::new(&output_dir)
-                .join(Path::new(DEFAULT_DATABASE_PATH).file_name().unwrap())
-                .to_string_lossy()
-                .to_string()
-        });
-        Ok(Self {
-            db_pickle_path: PathBuf::from(DEFAULT_DB_PICKLE_PATH),
-            db_jsonl_path: PathBuf::from(db_jsonl_path),
-            tfidf_meta_pickle_path: PathBuf::from(DEFAULT_TFIDF_META_PICKLE_PATH),
-            tfidf_meta_json_path: PathBuf::from(tfidf_meta_json_path),
-            database_path: PathBuf::from(database_path),
-            serve_cache_path: PathBuf::from(DEFAULT_SERVE_CACHE_PATH),
-            db_serve_path: PathBuf::from(DEFAULT_DB_SERVE_PATH),
-        })
-    }
-}
-
-fn load_paper_db(config: &CacheConfig) -> Result<HashMap<String, PaperRecord>, String> {
+fn load_paper_db(config: &AppConfig) -> Result<HashMap<String, PaperRecord>, String> {
     if config.db_pickle_path.exists() {
-        println!("loading the paper database {}", config.db_pickle_path.display());
+        println!(
+            "loading the paper database {}",
+            config.db_pickle_path.display()
+        );
+
         let mut db: HashMap<String, PaperRecord> = load_pickle(&config.db_pickle_path)?;
         for (pid, paper) in db.iter_mut() {
             normalize_paper(pid, paper);
         }
         return Ok(db);
     }
-    if config.db_jsonl_path.exists() {
-        println!("loading the paper database {}", config.db_jsonl_path.display());
-        return load_db_jsonl(&config.db_jsonl_path);
+    if config.db_path.exists() {
+        println!("loading the paper database {}", config.db_path.display());
+        return load_db_jsonl(&config.db_path);
+
     }
     Err("No paper database found. Expected db.p or db.jsonl.".to_string())
 }
 
-fn load_tfidf_meta(config: &CacheConfig) -> Result<TfidfMeta, String> {
+fn load_tfidf_meta(config: &AppConfig) -> Result<TfidfMeta, String> {
     if config.tfidf_meta_pickle_path.exists() {
-        println!("loading tfidf_meta {}", config.tfidf_meta_pickle_path.display());
+        println!(
+            "loading tfidf_meta {}",
+            config.tfidf_meta_pickle_path.display()
+        );
+
         if let Ok(meta) = load_pickle::<TfidfMeta>(&config.tfidf_meta_pickle_path) {
             return Ok(meta);
         }
@@ -283,12 +220,13 @@ fn load_tfidf_meta(config: &CacheConfig) -> Result<TfidfMeta, String> {
             idf: meta.idf.into_iter().map(|val| val as f64).collect(),
         });
     }
-    if config.tfidf_meta_json_path.exists() {
-        println!("loading tfidf_meta {}", config.tfidf_meta_json_path.display());
-        let contents = fs::read_to_string(&config.tfidf_meta_json_path).map_err(|err| {
+    if config.tfidf_meta_path.exists() {
+        println!("loading tfidf_meta {}", config.tfidf_meta_path.display());
+        let contents = fs::read_to_string(&config.tfidf_meta_path).map_err(|err| {
+
             format!(
                 "Failed to read tfidf_meta json {}: {err}",
-                config.tfidf_meta_json_path.display()
+                config.tfidf_meta_path.display()
             )
         })?;
         let meta = serde_json::from_str::<TfidfMeta>(&contents)
@@ -303,7 +241,9 @@ fn load_db_jsonl(path: &Path) -> Result<HashMap<String, PaperRecord>, String> {
     let reader = BufReader::new(file);
     let mut db = HashMap::new();
     for (index, line) in reader.lines().enumerate() {
-        let line = line.map_err(|err| format!("Failed to read {path:?} line {}: {err}", index + 1))?;
+        let line =
+            line.map_err(|err| format!("Failed to read {path:?} line {}: {err}", index + 1))?;
+
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
@@ -483,8 +423,8 @@ fn ensure_time_metadata(paper: &mut PaperRecord) -> Result<(), String> {
 
 fn compute_impact_score(paper: &mut PaperRecord, now_ts: f64) -> Result<(), String> {
     ensure_time_metadata(paper)?;
-    let years_since_pub = ((now_ts - paper.time_published.unwrap_or(0) as f64) / SECONDS_PER_YEAR)
-        .max(0.0);
+    let years_since_pub =
+        ((now_ts - paper.time_published.unwrap_or(0) as f64) / SECONDS_PER_YEAR).max(0.0);
     paper.years_since_pub = Some(years_since_pub);
     if let Some(citations) = paper.citation_count {
         let citations = citations as f64;
@@ -615,8 +555,9 @@ fn load_pickle<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, String> {
 
 fn write_pickle<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
     let options = SerOptions::new().proto_v2();
-    let encoded =
-        serde_pickle::to_vec(value, options).map_err(|err| format!("Failed to encode pickle: {err}"))?;
+    let encoded = serde_pickle::to_vec(value, options)
+        .map_err(|err| format!("Failed to encode pickle: {err}"))?;
+
     utils::write_atomic_bytes(path, &encoded)
 }
 

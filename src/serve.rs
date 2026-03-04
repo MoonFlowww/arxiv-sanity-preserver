@@ -27,6 +27,13 @@ use tower_http::services::ServeDir;
 use url::form_urlencoded;
 
 use crate::hnsw_index::HnswIndex;
+use crate::models::{
+    ApiErrorResponse, DownloadSettingsPayload, HealthResponse, IngestArxivForm,
+    IngestCreatedResponse, MetadataCoverage, NoteCoverage, OkMessageResponse, OkResponse,
+    PageBinCount, PaperApiRecord, PaperRecord, PapersMetricsResponse, RecomputeStatusApiResponse,
+    TimeBinCount,
+};
+
 use arxiv_sanity_pipeline::db::Database;
 use arxiv_sanity_pipeline::utils;
 
@@ -170,21 +177,6 @@ impl Default for DownloadSettings {
         }
     }
 }
-
-#[derive(Debug, serde::Deserialize)]
-struct DownloadTopicInput {
-    start: Option<String>,
-    end: Option<String>,
-    published: Option<bool>,
-    limit: Option<usize>,
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct DownloadSettingsPayload {
-    selected_topics: Vec<String>,
-    topics: HashMap<String, DownloadTopicInput>,
-}
-
 #[derive(Clone)]
 struct ServeData {
     db: HashMap<String, Value>,
@@ -1472,6 +1464,85 @@ fn papers_from_topic(data: &ServeData, topic_name: &str, vfilter: &str) -> Vec<V
         .collect();
     papers_filter_version(papers, vfilter)
 }
+fn paper_record_from_value(paper: &Value) -> PaperRecord {
+    serde_json::from_value(paper.clone()).unwrap_or_else(|_| PaperRecord {
+        _rawid: String::new(),
+        _version: 0,
+        title: String::new(),
+        arxiv_primary_category: None,
+        authors: Vec::new(),
+        link: String::new(),
+        citation_count: None,
+        impact_score: None,
+        summary: String::new(),
+        tags: Vec::new(),
+        repo_links: Vec::new(),
+        is_opensource: false,
+        updated: None,
+        published: None,
+        arxiv_comment: None,
+        legacy: HashMap::new(),
+    })
+}
+
+fn paper_api_record_from_record(
+    record: PaperRecord,
+    thumbs_dir: &Path,
+    in_library: bool,
+) -> PaperApiRecord {
+    let idvv = format!("{}v{}", record._rawid, record._version);
+    let thumb_fname = format!("{}.pdf.jpg", idvv);
+    let thumb_path = thumbs_dir.join(&thumb_fname);
+    let img = if thumb_path.is_file() {
+        format!("/static/thumbs/{}", thumb_fname)
+    } else {
+        "/static/missing.svg".to_string()
+    };
+
+    let published_time = record
+        .updated
+        .as_deref()
+        .and_then(parse_datetime)
+        .map(format_date_mdy);
+    let originally_published_time = record
+        .published
+        .as_deref()
+        .and_then(parse_datetime)
+        .map(format_date_mdy);
+
+    let mut comment = record.arxiv_comment.unwrap_or_default();
+    if comment.len() > 100 {
+        comment.truncate(100);
+        comment.push_str("...");
+    }
+
+    PaperApiRecord {
+        title: record.title,
+        pid: idvv,
+        rawpid: record._rawid.clone(),
+        category: record
+            .arxiv_primary_category
+            .and_then(|term| term.term)
+            .unwrap_or_default(),
+        authors: record
+            .authors
+            .into_iter()
+            .filter_map(|author| author.name)
+            .collect(),
+        link: record.link,
+        in_library: if in_library { 1 } else { 0 },
+        citation_count: record.citation_count,
+        impact_score: record.impact_score,
+        abstract_text: record.summary,
+        img,
+        tags: record.tags.into_iter().filter_map(|tag| tag.term).collect(),
+        repo_links: record.repo_links,
+        is_opensource: record.is_opensource,
+        published_time,
+        originally_published_time,
+        comment,
+    }
+}
 
 fn encode_json(
     papers: &[Value],
@@ -1488,125 +1559,17 @@ fn encode_json(
             }
         }
     }
-    let mut ret = Vec::new();
-    for paper in papers.iter().take(n) {
-        let rawid = paper.get("_rawid").and_then(|v| v.as_str()).unwrap_or("");
-        let version = paper.get("_version").and_then(|v| v.as_i64()).unwrap_or(0);
-        let idvv = format!("{}v{}", rawid, version);
-        let mut obj = Map::new();
-        obj.insert(
-            "title".to_string(),
-            json!(paper.get("title").and_then(|v| v.as_str()).unwrap_or("")),
-        );
-        obj.insert("pid".to_string(), json!(idvv));
-        obj.insert("rawpid".to_string(), json!(rawid));
-        obj.insert(
-            "category".to_string(),
-            json!(paper
-                .get("arxiv_primary_category")
-                .and_then(|v| v.get("term"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")),
-        );
-        let authors = paper
-            .get("authors")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|a| {
-                        a.get("name")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string())
-                    })
-                    .collect::<Vec<String>>()
-            })
-            .unwrap_or_default();
-        obj.insert("authors".to_string(), json!(authors));
-        obj.insert(
-            "link".to_string(),
-            json!(paper.get("link").and_then(|v| v.as_str()).unwrap_or("")),
-        );
-        obj.insert(
-            "in_library".to_string(),
-            json!(if libids.contains(rawid) { 1 } else { 0 }),
-        );
-        obj.insert(
-            "citation_count".to_string(),
-            json!(paper.get("citation_count").and_then(|v| v.as_i64())),
-        );
-        obj.insert(
-            "impact_score".to_string(),
-            json!(paper.get("impact_score").and_then(|v| v.as_f64())),
-        );
-        obj.insert(
-            "abstract".to_string(),
-            json!(paper.get("summary").and_then(|v| v.as_str()).unwrap_or("")),
-        );
-        let thumb_fname = format!("{}.pdf.jpg", idvv);
-        let thumb_path = thumbs_dir.join(&thumb_fname);
-        let img = if thumb_path.is_file() {
-            format!("/static/thumbs/{}", thumb_fname)
-        } else {
-            "/static/missing.svg".to_string()
-        };
-        obj.insert("img".to_string(), json!(img));
-        let tags = paper
-            .get("tags")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|t| {
-                        t.get("term")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string())
-                    })
-                    .collect::<Vec<String>>()
-            })
-            .unwrap_or_default();
-        obj.insert("tags".to_string(), json!(tags));
-        let repo_links = paper
-            .get("repo_links")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|t| t.as_str().map(|s| s.to_string()))
-                    .collect::<Vec<String>>()
-            })
-            .unwrap_or_default();
-        obj.insert("repo_links".to_string(), json!(repo_links));
-        obj.insert(
-            "is_opensource".to_string(),
-            json!(paper
-                .get("is_opensource")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false)),
-        );
-        if let Some(updated) = paper.get("updated").and_then(|v| v.as_str()) {
-            if let Some(ts) = parse_datetime(updated) {
-                obj.insert("published_time".to_string(), json!(format_date_mdy(ts)));
-            }
-        }
-        if let Some(published) = paper.get("published").and_then(|v| v.as_str()) {
-            if let Some(ts) = parse_datetime(published) {
-                obj.insert(
-                    "originally_published_time".to_string(),
-                    json!(format_date_mdy(ts)),
-                );
-            }
-        }
-        let mut comment = paper
-            .get("arxiv_comment")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        if comment.len() > 100 {
-            comment.truncate(100);
-            comment.push_str("...");
-        }
-        obj.insert("comment".to_string(), json!(comment));
-        ret.push(Value::Object(obj));
-    }
-    ret
+    papers
+        .iter()
+        .take(n)
+        .map(|paper| {
+            let record = paper_record_from_value(paper);
+            let in_library = libids.contains(&record._rawid);
+            serde_json::to_value(paper_api_record_from_record(record, thumbs_dir, in_library))
+                .unwrap_or(Value::Null)
+        })
+        .collect()
+
 }
 
 fn default_context(
@@ -2045,26 +2008,33 @@ async fn papers_metrics(
         }
     }
 
-    let mut time_series: Vec<(String, i64)> = time_counts.into_iter().collect();
-    time_series.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut time_series: Vec<TimeBinCount> = time_counts
+        .into_iter()
+        .map(|(bin, count)| TimeBinCount { bin, count })
+        .collect();
+    time_series.sort_by(|a, b| a.bin.cmp(&b.bin));
 
-    let mut page_histogram: Vec<(i64, i64)> = page_counts.into_iter().collect();
-    page_histogram.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut page_histogram: Vec<PageBinCount> = page_counts
+        .into_iter()
+        .map(|(pages, count)| PageBinCount { pages, count })
+        .collect();
+    page_histogram.sort_by(|a, b| a.pages.cmp(&b.pages));
 
-    Json(json!({
-        "total": papers.len(),
-        "time_bin": time_bin,
-        "time_series": time_series.into_iter().map(|(bin, count)| json!({"bin": bin, "count": count})).collect::<Vec<Value>>(),
-        "page_histogram": page_histogram.into_iter().map(|(pages, count)| json!({"pages": pages, "count": count})).collect::<Vec<Value>>(),
-        "note_coverage": {
-            "with_note": note_with,
-            "without_note": note_without,
+    Json(PapersMetricsResponse {
+        total: papers.len(),
+        time_bin: time_bin.to_string(),
+        time_series,
+        page_histogram,
+        note_coverage: NoteCoverage {
+            with_note: note_with,
+            without_note: note_without,
+
         },
-        "metadata_coverage": {
-            "pages_with_metadata": pages_with_metadata,
-            "pages_missing_metadata": (papers.len() as i64 - pages_with_metadata).max(0),
-        }
-    }))
+        metadata_coverage: MetadataCoverage {
+            pages_with_metadata,
+            pages_missing_metadata: (papers.len() as i64 - pages_with_metadata).max(0),
+        },
+    })
 }
 
 async fn topics(
@@ -2343,10 +2313,10 @@ async fn goaway(
 async fn health_check(
     State((_state, _env)): State<(AppState, Arc<Environment<'static>>)>,
 ) -> impl IntoResponse {
-    Json(json!({
-        "ok": true,
-        "version": env!("CARGO_PKG_VERSION"),
-    }))
+    Json(HealthResponse {
+        ok: true,
+        version: env!("CARGO_PKG_VERSION").to_string(),
+    })
     .into_response()
 }
 
@@ -2415,7 +2385,12 @@ async fn update_download_settings(
     let settings = match build_download_settings_from_payload(payload, &valid_topics) {
         Ok(settings) => settings,
         Err(err) => {
-            return (StatusCode::BAD_REQUEST, Json(json!({ "error": err }))).into_response();
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiErrorResponse { error: err }),
+            )
+                .into_response();
+
         }
     };
 
@@ -2423,12 +2398,12 @@ async fn update_download_settings(
     if let Err(err) = persist_download_settings(&state.config, &settings) {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": err })),
+            Json(ApiErrorResponse { error: err }),
         )
             .into_response();
     }
 
-    Json(json!({ "ok": true })).into_response()
+    Json(OkResponse { ok: true }).into_response()
 }
 
 async fn run_download_with_settings(
@@ -2443,7 +2418,11 @@ async fn run_download_with_settings(
             let settings = match build_download_settings_from_payload(payload, &valid_topics) {
                 Ok(settings) => settings,
                 Err(err) => {
-                    return (StatusCode::BAD_REQUEST, Json(json!({ "error": err })))
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(ApiErrorResponse { error: err }),
+                    )
+
                         .into_response();
                 }
             };
@@ -2461,7 +2440,7 @@ async fn run_download_with_settings(
     if let Err(err) = spawn_download_job() {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": err })),
+            Json(ApiErrorResponse { error: err }),
         )
             .into_response();
     }
@@ -2471,7 +2450,7 @@ async fn run_download_with_settings(
     } else {
         "Download started.".to_string()
     };
-    Json(json!({ "ok": true, "message": message })).into_response()
+    Json(OkMessageResponse { ok: true, message }).into_response()
 }
 async fn ingest_status(
     State((state, _env)): State<(AppState, Arc<Environment<'static>>)>,
@@ -2482,7 +2461,10 @@ async fn ingest_status(
         Some(job) => Json(job).into_response(),
         None => (
             StatusCode::NOT_FOUND,
-            Json(json!({ "error": "Unknown job id" })),
+            Json(ApiErrorResponse {
+                error: "Unknown job id".to_string(),
+            }),
+
         )
             .into_response(),
     }
@@ -2498,27 +2480,22 @@ async fn recompute_status_endpoint(
     State((state, _env)): State<(AppState, Arc<Environment<'static>>)>,
 ) -> impl IntoResponse {
     let status = get_recompute_status(&state);
-    Json(json!({
-        "status": status.status,
-        "message": status.message,
-        "percent": status.percent,
-        "updated_at": status.updated_at,
-        "error": status.error,
-    }))
+    Json(RecomputeStatusApiResponse {
+        status: status.status,
+        message: status.message,
+        percent: status.percent,
+        updated_at: status.updated_at,
+        error: status.error,
+    })
     .into_response()
 }
 
 async fn ingest_arxiv(
     State((state, _env)): State<(AppState, Arc<Environment<'static>>)>,
     headers: HeaderMap,
-    Form(form): Form<HashMap<String, String>>,
+    Form(form): Form<IngestArxivForm>,
 ) -> impl IntoResponse {
-    let paper_id_raw = form
-        .get("paper_id")
-        .cloned()
-        .unwrap_or_default()
-        .trim()
-        .to_string();
+    let paper_id_raw = form.paper_id.unwrap_or_default().trim().to_string();
     let paper_ids = utils::parse_arxiv_id_list(&paper_id_raw);
     let wants_json = headers
         .get("X-Requested-With")
@@ -2535,7 +2512,10 @@ async fn ingest_arxiv(
         if wants_json {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(json!({ "error": "Please enter at least one arXiv identifier to add." })),
+                Json(ApiErrorResponse {
+                    error: "Please enter at least one arXiv identifier to add.".to_string(),
+                }),
+
             )
                 .into_response();
         }
@@ -2548,7 +2528,10 @@ async fn ingest_arxiv(
         if wants_json {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(json!({ "error": "Please provide valid arXiv identifier(s), e.g., 1512.08756v2 or arXiv:1512.08756." })),
+                Json(ApiErrorResponse {
+                    error: "Please provide valid arXiv identifier(s), e.g., 1512.08756v2 or arXiv:1512.08756.".to_string(),
+                }),
+
             )
                 .into_response();
         }
@@ -2564,7 +2547,7 @@ async fn ingest_arxiv(
     });
 
     if wants_json {
-        return Json(json!({ "job_id": job_id })).into_response();
+        return Json(IngestCreatedResponse { job_id }).into_response();
     }
 
     Redirect::temporary("/").into_response()

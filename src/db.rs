@@ -142,9 +142,7 @@ impl Database {
     pub fn list_library_for_user(&self, user_id: i64) -> Result<Vec<LibraryEntry>, String> {
         let mut stmt = self
             .conn
-            .prepare(
-                "select lib_id, paper_id, user_id, update_time from library where user_id = ?",
-            )
+            .prepare("select lib_id, paper_id, user_id, update_time from library where user_id = ?")
             .map_err(|err| format!("Failed to query library for user {user_id}: {err}"))?;
         let iter = stmt
             .query_map([user_id], |row| {
@@ -234,9 +232,7 @@ impl Database {
                     "insert into library (paper_id, user_id, update_time) values (?, ?, ?)",
                     params![paper_id, user_id, update_time],
                 )
-                .map_err(|err| {
-                    format!("Failed to insert library entry for {paper_id}: {err}")
-                })?;
+                .map_err(|err| format!("Failed to insert library entry for {paper_id}: {err}"))?;
             Ok(true)
         }
     }

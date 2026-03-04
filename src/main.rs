@@ -33,6 +33,7 @@ mod download;
 mod hnsw_index;
 mod ingest;
 mod migrate;
+mod models;
 mod serve;
 mod twitter;
 

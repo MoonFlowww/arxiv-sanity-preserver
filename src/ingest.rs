@@ -179,11 +179,12 @@ fn update_incremental_tfidf(
 ) -> Result<(), String> {
     // Incremental TF-IDF policy: keep the existing IDF fixed for single-paper ingest.
     // Full recomputation (including IDF refresh) is handled by run_analyze.
-    let meta_contents = fs::read_to_string(&config.tfidf_meta_path)
-        .map_err(|err| format!("Failed to read {}: {err}", config.tfidf_meta_path))?;
+    let meta_contents = fs::read_to_string(config.tfidf_meta_path.as_path())
+        .map_err(|err| format!("Failed to read {}: {err}", config.tfidf_meta_path.display()))?;
+
     let mut meta: TfidfMeta = serde_json::from_str(&meta_contents)
         .map_err(|err| format!("Failed to parse tfidf meta: {err}"))?;
-    let mut tfidf: TfidfMatrix = read_bincode(Path::new(&config.tfidf_path))?;
+    let mut tfidf: TfidfMatrix = read_bincode(config.tfidf_path.as_path())?;
 
     let text = fs::read_to_string(txt_path)
         .map_err(|err| format!("Failed to read {txt_path:?}: {err}"))?;
@@ -208,15 +209,21 @@ fn update_incremental_tfidf(
         meta.ptoi.insert(pid.clone(), idx);
     }
 
-    println!("writing {}", config.tfidf_path);
-    write_bincode(Path::new(&config.tfidf_path), &tfidf)?;
-    println!("writing {}", config.tfidf_meta_path);
+    println!("writing {}", config.tfidf_path.display());
+    write_bincode(config.tfidf_path.as_path(), &tfidf)?;
+    println!("writing {}", config.tfidf_meta_path.display());
+
     let meta_json = serde_json::to_string_pretty(&meta)
         .map_err(|err| format!("Failed to serialize meta: {err}"))?;
-    fs::write(&config.tfidf_meta_path, meta_json)
-        .map_err(|err| format!("Failed to write {}: {err}", config.tfidf_meta_path))?;
+    fs::write(&config.tfidf_meta_path, meta_json).map_err(|err| {
+        format!(
+            "Failed to write {}: {err}",
+            config.tfidf_meta_path.display()
+        )
+    })?;
 
-    let hnsw_index_path = Path::new(&config.hnsw_index_path);
+    let hnsw_index_path = config.hnsw_index_path.as_path();
+
     let mut hnsw_index = if hnsw_index_path.exists() {
         match read_bincode::<HnswIndex>(hnsw_index_path) {
             Ok(index) => Some(index),
@@ -246,7 +253,7 @@ fn update_incremental_tfidf(
         println!("building HNSW index...");
         hnsw_index = Some(HnswIndex::build(&tfidf.vectors, &meta.pids)?);
     }
-    println!("writing {}", config.hnsw_index_path);
+    println!("writing {}", config.hnsw_index_path.display());
     if let Some(index) = hnsw_index {
         write_bincode(Path::new(&config.hnsw_index_path), &index)?;
     }
@@ -290,7 +297,7 @@ fn ingest_single_paper_id(
         write_db_jsonl(Path::new(&config.db_path), &db)?;
     }
 
-    let pdf_dir = Path::new(&config.pdf_dir);
+    let pdf_dir = config.pdf_dir.as_path();
     let client = Client::builder()
         .user_agent("arxiv-sanity-preserver (contact: you@example.com)")
         .build()
